@@ -708,24 +708,48 @@ export default function CheckoutPage({ panel = false }) {
             />
             <FormControl required>
               <Typography variant="subtitle1" fontWeight={700}>Payment method</Typography>
-              <RadioGroup
-                value={paymentMethodId}
-                onChange={(event) => {
-                  setPaymentMethodId(event.target.value)
-                  setErrorMessage('')
-                }}
-              >
-                {availablePaymentMethods.map((method) => (
-                  <FormControlLabel
-                    key={method.id}
-                    value={method.id}
-                    control={<Radio />}
-                    label={method.settlement_type === 'provider'
-                      ? `Online payment · ${method.name}`
-                      : `${method.name} · Pick-up`}
-                  />
-                ))}
-              </RadioGroup>
+              {fulfillment === 'pickup' && (
+                <RadioGroup
+                  value={selectedPaymentMethod?.settlement_type === 'pay_at_branch' ? paymentMethodId : ''}
+                  onChange={(event) => {
+                    setPaymentMethodId(event.target.value)
+                    setErrorMessage('')
+                  }}
+                >
+                  {availablePaymentMethods
+                    .filter((method) => method.settlement_type === 'pay_at_branch')
+                    .map((method) => (
+                      <FormControlLabel
+                        key={method.id}
+                        value={method.id}
+                        control={<Radio />}
+                        label={`${method.name} · Pick-up`}
+                      />
+                    ))}
+                </RadioGroup>
+              )}
+              {onlinePaymentMethods.length > 0 && (
+                <FormControl fullWidth size="small" sx={{ mt: 1 }}>
+                  <InputLabel id="checkout-online-payment-label">Online payment method</InputLabel>
+                  <Select
+                    labelId="checkout-online-payment-label"
+                    label="Online payment method"
+                    value={selectedPaymentMethod?.settlement_type === 'provider' ? paymentMethodId : ''}
+                    displayEmpty
+                    onChange={(event) => {
+                      setPaymentMethodId(event.target.value)
+                      setErrorMessage('')
+                    }}
+                  >
+                    {fulfillment === 'pickup' && <MenuItem value="">Choose an online payment method</MenuItem>}
+                    {onlinePaymentMethods.map((method) => (
+                      <MenuItem key={method.id} value={method.id}>
+                        {method.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
               {!availablePaymentMethods.length && fulfillment === 'pickup' && (
                 <Typography variant="body2" color="error">
                   No payment methods are currently enabled for this branch.
