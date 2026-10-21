@@ -12,7 +12,6 @@ const MenuPage = lazy(() => import('../pages/MenuPage.jsx'))
 const ProductPage = lazy(() => import('../pages/ProductPage.jsx'))
 const BranchesPage = lazy(() => import('../pages/BranchesPage.jsx'))
 const AboutPage = lazy(() => import('../pages/AboutPage.jsx'))
-const ContactPage = lazy(() => import('../pages/ContactPage.jsx'))
 const CheckoutPage = lazy(() => import('../pages/CheckoutPage.jsx'))
 const OrderHistoryPage = lazy(() => import('../pages/OrderHistoryPage.jsx'))
 const OrderDetailPage = lazy(() => import('../pages/OrderDetailPage.jsx'))
@@ -122,7 +121,7 @@ export default function AppRouter() {
           <Route path="/menu/:productId" element={<ProductPage />} />
           <Route path="/branches" element={<BranchesPage />} />
           <Route path="/about" element={<AboutPage />} />
-          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/contact" element={<Navigate to="/branches" replace />} />
           <Route
             path="/cart"
             element={<Navigate to="/menu" replace state={{ openCart: true }} />}

@@ -63,7 +63,7 @@ function BranchCard({ branch }) {
           height: '100%',
           overflow: 'hidden',
           borderColor: 'rgba(67, 48, 34, 0.12)',
-          borderRadius: 3,
+          borderRadius: 4,
           transition: 'transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease',
           '&:hover': {
             transform: 'translateY(-4px)',
@@ -72,30 +72,64 @@ function BranchCard({ branch }) {
           },
         }}
       >
-        <Box sx={{ height: 7, bgcolor: 'primary.main' }} />
-        <CardContent sx={{ p: { xs: 2.5, sm: 3 }, '&:last-child': { pb: 3 } }}>
-          <Stack spacing={2.25} sx={{ height: '100%' }}>
-            <Box>
-              <Typography variant="overline" color="primary" sx={{ letterSpacing: '.12em' }}>
-                AGAPÉ CAFÉ · BRANCH
+        <Box
+          sx={{
+            px: { xs: 2.5, sm: 3 },
+            py: 2.5,
+            background: 'linear-gradient(135deg, #f5eadc 0%, #fffaf3 100%)',
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+            <Box
+              sx={{
+                width: 46,
+                height: 46,
+                flexShrink: 0,
+                display: 'grid',
+                placeItems: 'center',
+                borderRadius: 3,
+                bgcolor: 'primary.main',
+                color: 'primary.contrastText',
+              }}
+            >
+              <PlaceOutlinedIcon />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="overline" color="primary" sx={{ letterSpacing: '.12em', lineHeight: 1.6 }}>
+                VISIT AGAPÉ CAFÉ
               </Typography>
-              <Typography variant="h5" sx={{ mt: 0.25, fontWeight: 750 }}>
+              <Typography variant="h5" sx={{ fontWeight: 750, lineHeight: 1.25 }}>
                 {branch.name}
               </Typography>
             </Box>
-            <Stack spacing={1.25}>
-              {branch.address && (
-                <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
-                  <PlaceOutlinedIcon color="primary" fontSize="small" sx={{ mt: 0.25 }} />
-                  <Typography variant="body2" color="text.secondary">
-                    {branch.address}
-                  </Typography>
-                </Stack>
-              )}
+          </Stack>
+        </Box>
+        <CardContent sx={{ p: { xs: 2.5, sm: 3 }, '&:last-child': { pb: 3 } }}>
+          <Stack spacing={2} sx={{ height: '100%' }}>
+            {branch.address && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: 1.25,
+                  alignItems: 'flex-start',
+                  p: 1.5,
+                  borderRadius: 2.5,
+                  bgcolor: 'action.hover',
+                }}
+              >
+                <PlaceOutlinedIcon color="primary" fontSize="small" sx={{ mt: 0.2 }} />
+                <Typography variant="body2" sx={{ lineHeight: 1.6 }}>
+                  {branch.address}
+                </Typography>
+              </Box>
+            )}
+            <Stack spacing={1.5} sx={{ px: 0.5 }}>
               {hours && (
                 <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
                   <AccessTimeOutlinedIcon color="primary" fontSize="small" sx={{ mt: 0.25 }} />
-                  <Typography variant="body2" color="text.secondary">{hours}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>{hours}</Typography>
                 </Stack>
               )}
               {branch.phone && (
@@ -106,7 +140,7 @@ function BranchCard({ branch }) {
                     href={`tel:${branch.phone}`}
                     variant="body2"
                     color="text.primary"
-                    sx={{ textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
+                    sx={{ textDecoration: 'none', '&:hover': { color: 'primary.main' }, lineHeight: 1.6 }}
                   >
                     {branch.phone}
                   </Typography>
@@ -133,12 +167,12 @@ function BranchCard({ branch }) {
               )}
             </Stack>
             <Box sx={{ flex: 1 }} />
-            <Divider />
+            <Divider sx={{ mt: 0.5 }} />
             <Button
               variant="contained"
               startIcon={<PlaceOutlinedIcon />}
               onClick={() => setMapOpen(true)}
-              sx={{ alignSelf: 'flex-start', borderRadius: 2 }}
+              sx={{ alignSelf: 'stretch', minHeight: 42, borderRadius: 2 }}
             >
               View location
             </Button>

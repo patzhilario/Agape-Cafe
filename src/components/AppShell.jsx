@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, AppBar, Box, Button, Container, Drawer, IconButton, Snackbar, Stack, Toolbar, Typography, useMediaQuery, useTheme } from '@mui/material'
+import { Alert, AppBar, Badge, Box, Button, Container, Drawer, IconButton, Snackbar, Stack, Toolbar, Typography, useMediaQuery, useTheme } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import MenuIcon from '@mui/icons-material/Menu'
+import ShoppingCartOutlinedIcon from '@mui/icons-material/ShoppingCartOutlined'
 import { Link as RouterLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth.js'
 import { useCart } from '../features/orders/useCart.js'
@@ -14,7 +15,6 @@ const navigation = [
   { label: 'Menu', to: '/menu' },
   { label: 'Branches', to: '/branches' },
   { label: 'About', to: '/about' },
-  { label: 'Contact', to: '/contact' },
 ]
 
 export default function AppShell({ children }) {
@@ -131,28 +131,42 @@ export default function AppShell({ children }) {
                   color="primary"
                   size="small"
                   disabled={isLoading}
-                  sx={{ whiteSpace: 'nowrap' }}
+                  variant="outlined"
+                  sx={{
+                    whiteSpace: 'nowrap',
+                    borderWidth: 1.5,
+                    '&:hover': { borderWidth: 1.5, bgcolor: 'rgba(91, 57, 39, 0.06)' },
+                  }}
                 >
                   Sign in
                 </Button>
               )}
-              <Button
+              <IconButton
                 onClick={openCart}
                 color="primary"
-                size="small"
-                sx={{ whiteSpace: 'nowrap' }}
-                aria-label={`Cart, ${totalQuantity} items`}
+                aria-label={`Shopping cart, ${totalQuantity} items`}
                 aria-haspopup="dialog"
                 aria-expanded={isCartOpen}
+                sx={{
+                  width: 40,
+                  height: 40,
+                  border: 1,
+                  borderColor: 'divider',
+                }}
               >
-                Cart{totalQuantity ? ` (${totalQuantity})` : ''}
-              </Button>
+                <Badge badgeContent={totalQuantity} color="secondary" max={99}>
+                  <ShoppingCartOutlinedIcon fontSize="small" />
+                </Badge>
+              </IconButton>
             </Stack>}
             {isMobile && (
               <IconButton
                 ref={mobileNavigationButtonRef}
                 aria-label="Open site navigation"
-                onClick={() => setNavigationOpen(true)}
+                onClick={(event) => {
+                  event.currentTarget.blur()
+                  setNavigationOpen(true)
+                }}
                 sx={{ ml: 'auto' }}
               >
                 <MenuIcon />
@@ -169,7 +183,9 @@ export default function AppShell({ children }) {
         slotProps={{
           paper: { sx: { width: 'min(88vw, 340px)', p: 2 } },
           transition: {
-            onExited: () => mobileNavigationButtonRef.current?.focus(),
+            onExited: () => {
+              window.requestAnimationFrame(() => mobileNavigationButtonRef.current?.focus())
+            },
           },
         }}
       >
@@ -221,9 +237,10 @@ export default function AppShell({ children }) {
               component={RouterLink}
               to="/auth/sign-in"
               color="primary"
+              variant="contained"
               disabled={isLoading}
               onClick={closeNavigation}
-              sx={{ justifyContent: 'flex-start', minHeight: 44 }}
+              sx={{ justifyContent: 'flex-start', minHeight: 44, mt: 1 }}
             >
               Sign in
             </Button>
@@ -234,9 +251,14 @@ export default function AppShell({ children }) {
               closeNavigation()
               openCart()
             }}
+            startIcon={
+              <Badge badgeContent={totalQuantity} color="secondary" max={99}>
+                <ShoppingCartOutlinedIcon fontSize="small" />
+              </Badge>
+            }
             sx={{ justifyContent: 'flex-start', minHeight: 44 }}
           >
-            Cart{totalQuantity ? ` (${totalQuantity})` : ''}
+            Shopping cart
           </Button>
         </Stack>
       </Drawer>

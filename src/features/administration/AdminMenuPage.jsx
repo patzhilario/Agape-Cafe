@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Container,
   Dialog,
@@ -103,7 +104,7 @@ function AdminMenuPage() {
           return data
         }),
       getSupabaseClient().from('products')
-        .select('id, category_id, name, sku, description, image_path, price, is_published, is_available, is_featured, archived_at')
+        .select('id, category_id, name, sku, description, image_path, price, is_published, is_available, is_featured, is_best_seller, archived_at')
         .is('archived_at', null)
         .order('name')
         .then(({ data, error }) => {
@@ -141,6 +142,7 @@ function AdminMenuPage() {
           is_published: product.is_published,
           is_available: product.is_available,
           is_featured: product.is_featured,
+          is_best_seller: product.is_best_seller,
         }])))
         const assignedBranch = account.branchAssignments[0]?.branch_id
         const firstActiveBranch = loadedBranches.find((branch) => branch.is_active)?.id
@@ -384,6 +386,7 @@ function AdminMenuPage() {
         is_published: edit.is_published,
         is_available: edit.is_available,
         is_featured: edit.is_featured,
+        is_best_seller: edit.is_best_seller,
       }).eq('id', product.id)
       if (error) throw new Error(error.message)
       productSaved = true
@@ -913,11 +916,32 @@ function AdminMenuPage() {
               <TableBody>
                 {paginatedProducts.map((product) => (
                   <TableRow key={product.id} hover>
-                    <TableCell sx={{ fontWeight: 700 }}>{product.name}</TableCell>
+                    <TableCell>
+                      <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+                        <Typography fontWeight={700}>{product.name}</Typography>
+                        {product.is_best_seller && (
+                          <Chip size="small" color="secondary" label="Best seller" />
+                        )}
+                      </Stack>
+                    </TableCell>
                     <TableCell>{product.sku}</TableCell>
                     <TableCell>{categories.find((category) => category.id === product.category_id)?.name || '—'}</TableCell>
                     <TableCell align="right">{formatPrice(product.price)}</TableCell>
-                    <TableCell>{product.is_published ? 'Published' : 'Unpublished'} · {product.is_available ? 'Available' : 'Unavailable'}</TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                        <Chip
+                          size="small"
+                          color={product.is_published ? 'success' : 'default'}
+                          label={product.is_published ? 'Published' : 'Unpublished'}
+                        />
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          color={product.is_available ? 'success' : 'default'}
+                          label={product.is_available ? 'Available' : 'Unavailable'}
+                        />
+                      </Stack>
+                    </TableCell>
                     <TableCell align="right">
                       <Button size="small" variant="outlined" onClick={() => setEditingProductId(product.id)}>Edit</Button>
                     </TableCell>
@@ -1002,6 +1026,7 @@ function AdminMenuPage() {
                         <FormControlLabel control={<Switch checked={Boolean(edit.is_published)} onChange={(event) => setProductEdits((state) => ({ ...state, [product.id]: { ...state[product.id], is_published: event.target.checked } }))} />} label="Published" />
                         <FormControlLabel control={<Switch checked={Boolean(edit.is_available)} onChange={(event) => setProductEdits((state) => ({ ...state, [product.id]: { ...state[product.id], is_available: event.target.checked } }))} />} label="Available" />
                         <FormControlLabel control={<Switch checked={Boolean(edit.is_featured)} onChange={(event) => setProductEdits((state) => ({ ...state, [product.id]: { ...state[product.id], is_featured: event.target.checked } }))} />} label="Featured" />
+                        <FormControlLabel control={<Switch checked={Boolean(edit.is_best_seller)} onChange={(event) => setProductEdits((state) => ({ ...state, [product.id]: { ...state[product.id], is_best_seller: event.target.checked } }))} />} label="Best seller badge" />
                       </Stack>
                       <Button variant="contained" onClick={() => saveProduct(product)} disabled={isSaving}>Save catalog details</Button>
                       <Stack spacing={1}>

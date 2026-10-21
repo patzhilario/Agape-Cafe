@@ -1,8 +1,9 @@
-import { lazy, useRef, useState } from 'react'
+import { lazy, useEffect, useRef, useState } from 'react'
 import {
   Alert,
   AppBar,
   Avatar,
+  Badge,
   Box,
   Button,
   Chip,
@@ -38,6 +39,7 @@ import HistoryIcon from '@mui/icons-material/History'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { useAuth } from './useAuth.js'
 import logo from '../../assets/logo.jpg'
+import { getSupabaseClient } from '../../lib/supabaseClient.js'
 
 const AccessManagementPage = lazy(() => import('./AccessManagementPage.jsx'))
 const AdminAuditPage = lazy(() => import('./AdminAuditPage.jsx'))
@@ -88,8 +90,10 @@ export function AdminArea() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [signOutError, setSignOutError] = useState('')
+  const [openOrdersCount, setOpenOrdersCount] = useState(0)
   const mobileMenuButtonRef = useRef(null)
   const isSuperAdmin = account.roles.includes('super_admin')
+  const canViewOrders = isSuperAdmin || hasPermission('orders', 'view')
   const googleAvatarUrl =
     account.google_avatar_url ||
     session?.user?.user_metadata?.avatar_url ||
@@ -130,6 +134,37 @@ export function AdminArea() {
     (section) => !section.module || isSuperAdmin || hasPermission(section.module, 'view'),
   )
   const navigationGroups = [...new Set(visibleSections.map((section) => section.group))]
+  useEffect(() => {
+    if (!canViewOrders) return undefined
+
+    let active = true
+    async function loadOpenOrdersCount() {
+      try {
+        const { count, error } = await getSupabaseClient()
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['pending', 'confirmed', 'preparing', 'ready'])
+        if (error) throw new Error(error.message)
+        if (active) setOpenOrdersCount(count || 0)
+      } catch (error) {
+        console.error('Unable to load the open order count for navigation.', error)
+      }
+    }
+
+    void loadOpenOrdersCount()
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void loadOpenOrdersCount()
+    }, 30_000)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void loadOpenOrdersCount()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      active = false
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [canViewOrders])
   const isDeniedRoute = (sectionPath && !currentSection) ||
     (sectionPath === 'permissions' && !isSuperAdmin) ||
     (currentSection?.module && !hasPermission(currentSection.module, 'view') && !isSuperAdmin)
@@ -315,8 +350,26 @@ export function AdminArea() {
                   onClick={() => setDrawerOpen(false)}
                   sx={{ borderRadius: 2, mb: 0.5 }}
                 >
-                  <ListItemIcon sx={{ minWidth: 40 }}><Icon fontSize="small" /></ListItemIcon>
-                  <ListItemText primary={section.label} />
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    {section.path === 'orders' ? (
+                      <Badge
+                        badgeContent={openOrdersCount}
+                        color="error"
+                        max={99}
+                        invisible={openOrdersCount === 0}
+                      >
+                        <Icon fontSize="small" />
+                      </Badge>
+                    ) : (
+                      <Icon fontSize="small" />
+                    )}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={section.label}
+                    secondary={section.path === 'orders' && openOrdersCount
+                      ? `${openOrdersCount} open ${openOrdersCount === 1 ? 'order' : 'orders'}`
+                      : undefined}
+                  />
                 </ListItemButton>
               )
             })}
@@ -351,7 +404,9 @@ export function AdminArea() {
         slotProps={{
           transition: {
             onExited: () => {
-              if (isMobile) mobileMenuButtonRef.current?.focus()
+              if (isMobile) {
+                window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus())
+              }
             },
           },
         }}

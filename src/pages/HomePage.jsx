@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
+import CoffeeOutlinedIcon from '@mui/icons-material/CoffeeOutlined'
 import {
   Box,
   Button,
@@ -119,62 +120,260 @@ export default function HomePage() {
     <>
       <Box
         sx={{
-          bgcolor: 'primary.dark',
-          color: 'primary.contrastText',
-          py: { xs: 9, md: 15 },
-          overflow: 'hidden',
           position: 'relative',
+          overflow: 'hidden',
+          background: 'linear-gradient(120deg, #f4eadc 0%, #fbf7f1 56%, #efe1d1 100%)',
+          color: 'text.primary',
+          py: { xs: 5, sm: 7, md: 10 },
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            width: { xs: 240, md: 420 },
+            height: { xs: 240, md: 420 },
+            borderRadius: '50%',
+            border: '1px solid rgba(91, 57, 39, 0.08)',
+            right: { xs: -125, md: -145 },
+            top: { xs: -105, md: -180 },
+            boxShadow: '0 0 0 34px rgba(91, 57, 39, 0.025), 0 0 0 72px rgba(91, 57, 39, 0.02)',
+          },
           '&::after': {
             content: '""',
             position: 'absolute',
-            width: { xs: 260, md: 500 },
-            height: { xs: 260, md: 500 },
-            border: '1px solid rgba(255,250,244,.12)',
+            width: { xs: 150, md: 230 },
+            height: { xs: 150, md: 230 },
             borderRadius: '50%',
-            right: { xs: -110, md: '4%' },
-            top: '50%',
-            transform: 'translateY(-50%)',
-            boxShadow: '0 0 0 44px rgba(255,250,244,.035), 0 0 0 88px rgba(255,250,244,.025)',
+            bgcolor: 'rgba(184, 121, 69, 0.08)',
+            left: { xs: -90, md: '8%' },
+            bottom: { xs: -105, md: -145 },
           },
         }}
       >
         <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
-          <Stack spacing={3} sx={{ maxWidth: 720 }}>
-            <Typography variant="overline" sx={{ letterSpacing: '.18em', opacity: 0.8 }}>
-              AGAPÉ CAFÉ
-            </Typography>
-            <Typography variant="h1" color="inherit">
-              A little love in every cup.
-            </Typography>
-            <Typography
-              variant="h6"
-              color="inherit"
-              sx={{ maxWidth: 580, opacity: 0.82, fontWeight: 400 }}
-            >
-              Find your next favorite from the Agapé Café menu and choose the
-              branch that works for you.
-            </Typography>
-            <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
-              <Button
-                component={RouterLink}
-                to="/menu"
-                variant="contained"
-                color="secondary"
-                size="large"
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: '1.05fr 0.95fr' },
+              gap: { xs: 4, md: 7 },
+              alignItems: 'center',
+            }}
+          >
+            <Stack spacing={{ xs: 2, md: 2.5 }} sx={{ maxWidth: 600, py: { md: 2 } }}>
+              <Chip
+                icon={<CoffeeOutlinedIcon />}
+                label="A little pause, made just for you"
+                sx={{
+                  alignSelf: 'flex-start',
+                  bgcolor: 'rgba(255, 253, 249, 0.75)',
+                  color: 'primary.dark',
+                  border: '1px solid rgba(91, 57, 39, 0.12)',
+                  '& .MuiChip-icon': { color: 'primary.main' },
+                }}
+              />
+              <Typography
+                variant="h1"
+                sx={{
+                  maxWidth: 620,
+                  color: 'primary.dark',
+                  fontSize: { xs: 'clamp(2.1rem, 9vw, 3.25rem)', md: 'clamp(3.5rem, 5.7vw, 5.3rem)' },
+                  lineHeight: { xs: 1.04, md: 1.02 },
+                  letterSpacing: '-0.055em',
+                }}
               >
-                Explore the menu
-              </Button>
-              <Button
-                component={RouterLink}
-                to="/branches"
-                variant="outlined"
-                color="inherit"
-                size="large"
+                Find your little moment of calm.
+              </Typography>
+              <Typography
+                variant="h6"
+                sx={{
+                  maxWidth: 500,
+                  color: 'text.secondary',
+                  fontWeight: 400,
+                  lineHeight: 1.7,
+                  fontSize: { xs: '1rem', md: '1.15rem' },
+                }}
               >
-                Find a branch
-              </Button>
+                Thoughtfully made coffee, comforting favorites, and a cozy
+                little break waiting for you at Agapé Café.
+              </Typography>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1.25}
+                useFlexGap
+                sx={{ pt: 0.5, flexWrap: 'wrap', alignItems: { sm: 'center' } }}
+              >
+                <Button
+                  component={RouterLink}
+                  to="/menu"
+                  variant="contained"
+                  color="primary"
+                  size="large"
+                  endIcon={<ArrowForwardIcon />}
+                  sx={{ minHeight: 48, px: 2.5, width: { xs: '100%', sm: 'auto' } }}
+                >
+                  Explore the menu
+                </Button>
+                <Button
+                  component={RouterLink}
+                  to="/branches"
+                  variant="text"
+                  color="primary"
+                  size="large"
+                  sx={{ minHeight: 46, px: 2, width: { xs: '100%', sm: 'auto' } }}
+                >
+                  Find your nearest café
+                </Button>
+              </Stack>
+              <Stack
+                direction="row"
+                spacing={{ xs: 1.5, sm: 2.5 }}
+                useFlexGap
+                sx={{
+                  pt: { xs: 0.5, md: 1 },
+                  flexWrap: 'wrap',
+                  rowGap: 1,
+                  color: 'text.secondary',
+                }}
+              >
+                {['Made fresh to order', 'A warm welcome, always'].map((item) => (
+                  <Stack key={item} direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+                    <Box
+                      aria-hidden="true"
+                      sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'secondary.main' }}
+                    />
+                    <Typography variant="body2">{item}</Typography>
+                  </Stack>
+                ))}
+              </Stack>
             </Stack>
-          </Stack>
+            <Box
+              sx={{
+                position: 'relative',
+                width: '100%',
+                maxWidth: 520,
+                justifySelf: { md: 'end' },
+                mx: { xs: 'auto', md: 0 },
+                pr: { xs: 1, sm: 2 },
+                pb: { xs: 1, sm: 2 },
+              }}
+            >
+              <Box
+                sx={{
+                  position: 'absolute',
+                  inset: { xs: '10% 0 0 10%', md: '8% 0 0 12%' },
+                  borderRadius: { xs: 6, md: 8 },
+                  bgcolor: 'secondary.main',
+                  opacity: 0.18,
+                  transform: 'rotate(4deg)',
+                }}
+              />
+              <Box
+                sx={{
+                  position: 'relative',
+                  aspectRatio: { xs: '1.16 / 1', sm: '1.35 / 1', md: '0.96 / 1' },
+                  overflow: 'hidden',
+                  borderRadius: { xs: 5, md: 7 },
+                  bgcolor: '#e8d8c5',
+                  background: 'linear-gradient(145deg, #e7d5c0 0%, #f4e9dc 50%, #d7b99b 100%)',
+                  boxShadow: '0 28px 70px rgba(57, 35, 23, 0.16)',
+                }}
+              >
+                <Box
+                  aria-hidden="true"
+                  sx={{
+                    position: 'absolute',
+                    inset: 0,
+                    overflow: 'hidden',
+                    background:
+                      'radial-gradient(circle at 52% 43%, #d8b58f 0 22%, transparent 22.5%), radial-gradient(circle at 50% 45%, rgba(255,253,249,.48) 0 38%, transparent 38.5%), linear-gradient(145deg, #eadbc9 0%, #f4eadf 52%, #cfaa87 100%)',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      width: { xs: 188, sm: 220, md: 270 },
+                      height: { xs: 188, sm: 220, md: 270 },
+                      left: '50%',
+                      top: '45%',
+                      transform: 'translate(-50%, -50%)',
+                      borderRadius: '50%',
+                      display: 'grid',
+                      placeItems: 'center',
+                      bgcolor: 'rgba(255, 253, 249, 0.58)',
+                      border: '1px solid rgba(255, 253, 249, 0.72)',
+                      boxShadow: '0 20px 55px rgba(91, 57, 39, 0.12)',
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: '76%',
+                        height: '76%',
+                        borderRadius: '50%',
+                        display: 'grid',
+                        placeItems: 'center',
+                        color: '#fffaf4',
+                        bgcolor: 'primary.main',
+                        boxShadow: 'inset 0 0 0 10px rgba(255,255,255,.08)',
+                      }}
+                    >
+                      <CoffeeOutlinedIcon sx={{ fontSize: { xs: 92, sm: 112, md: 136 } }} />
+                    </Box>
+                  </Box>
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      width: { xs: 46, md: 62 },
+                      height: { xs: 46, md: 62 },
+                      borderRadius: '50%',
+                      top: '13%',
+                      right: '15%',
+                      bgcolor: 'rgba(255, 253, 249, 0.72)',
+                      boxShadow: '0 10px 28px rgba(91, 57, 39, 0.08)',
+                    }}
+                  />
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      width: { xs: 25, md: 34 },
+                      height: { xs: 25, md: 34 },
+                      borderRadius: '50%',
+                      top: '24%',
+                      left: '14%',
+                      bgcolor: 'rgba(91, 57, 39, 0.12)',
+                    }}
+                  />
+                </Box>
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    inset: '45% 0 0',
+                    background: 'linear-gradient(transparent, rgba(40, 28, 21, 0.38))',
+                  }}
+                />
+                <Paper
+                  elevation={0}
+                  sx={{
+                    position: 'absolute',
+                    left: { xs: 14, sm: 20 },
+                    right: { xs: 14, sm: 20 },
+                    bottom: { xs: 14, sm: 20 },
+                    p: { xs: 1.5, sm: 2 },
+                    borderRadius: 3,
+                    bgcolor: 'rgba(255, 253, 249, 0.94)',
+                    backdropFilter: 'blur(12px)',
+                  }}
+                >
+                  <Typography variant="overline" color="primary" sx={{ letterSpacing: '.12em' }}>
+                    YOUR COFFEE BREAK
+                  </Typography>
+                  <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1.3 }}>
+                    Something lovely is brewing
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Take a breath. We’ll make your moment.
+                  </Typography>
+                </Paper>
+              </Box>
+            </Box>
+          </Box>
         </Container>
       </Box>
 
