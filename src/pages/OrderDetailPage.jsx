@@ -333,7 +333,21 @@ export default function OrderDetailPage() {
                       Your benefit ID is being verified. The branch will review your payment proof after confirming the discount and updated total.
                     </Alert>
                   )}
-                  {benefitRequest?.status !== 'pending' && (
+                  {paymentProof?.status === 'pending' && (
+                    <Alert severity="info">
+                      Payment proof received{paymentProof.reference_number ? ` · Reference: ${paymentProof.reference_number}` : ''}. No need to upload it again; the branch will verify your payment.
+                    </Alert>
+                  )}
+                  {paymentProof?.status === 'approved' && (
+                    <Alert severity="success">
+                      Payment verified{paymentProof.reference_number ? ` · Reference: ${paymentProof.reference_number}` : ''}. Thank you!
+                    </Alert>
+                  )}
+                  {paymentProof?.status === 'rejected' && paymentProof.review_note && (
+                    <Alert severity="warning">{paymentProof.review_note}</Alert>
+                  )}
+                  {benefitRequest?.status !== 'pending' &&
+                    !['pending', 'approved'].includes(paymentProof?.status) && (
                     <>
                       {(order.payment?.method?.qr_code_path || (
                         order.payment?.payment_method_code === 'gcash' ? order.branch?.gcash_qr_path : null
@@ -348,7 +362,9 @@ export default function OrderDetailPage() {
                         />
                       )}
                       <Typography color="text.secondary">
-                        Pay the current order total of {formatPrice(order.total)} to {order.branch?.name} using the QR above, then enter the reference number and upload your receipt.
+                        {paymentProof?.status === 'rejected'
+                          ? `Upload a new receipt for the current order total of ${formatPrice(order.total)} to ${order.branch?.name} using the QR above.`
+                          : `Pay the current order total of ${formatPrice(order.total)} to ${order.branch?.name} using the QR above, then enter the reference number and upload your receipt.`}
                       </Typography>
                       {(!paymentProof || paymentProof.status === 'rejected') && (
                         <TextField
@@ -359,37 +375,28 @@ export default function OrderDetailPage() {
                           slotProps={{ htmlInput: { maxLength: 50 } }}
                         />
                       )}
-                      {paymentProof?.review_note && <Alert severity="warning">{paymentProof.review_note}</Alert>}
                       {paymentProofError && <Alert severity="error">{paymentProofError}</Alert>}
                       {paymentProofSuccess && <Alert severity="success">{paymentProofSuccess}</Alert>}
-                      {paymentProof?.status === 'pending' ? (
-                        <Alert severity="info">Your proof is awaiting verification by the branch.</Alert>
-                      ) : paymentProof?.status === 'approved' ? (
-                        <Alert severity="success">Payment verified.</Alert>
-                      ) : (
-                        <>
-                          <Button
-                            component="label"
-                            variant="outlined"
-                            fullWidth
-                            sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}
-                          >
-                            {paymentProofFile?.name || (paymentProof?.status === 'rejected' ? 'Upload new payment proof' : 'Choose payment screenshot or PDF')}
-                            <input
-                              hidden
-                              type="file"
-                              accept="image/jpeg,image/png,image/webp,application/pdf"
-                              onChange={(event) => {
-                                setPaymentProofFile(event.target.files?.[0] || null)
-                                event.target.value = ''
-                              }}
-                            />
-                          </Button>
-                          <Button type="submit" variant="contained" disabled={isSubmittingPaymentProof || !paymentProofFile || paymentReference.trim().length < 4}>
-                            {isSubmittingPaymentProof ? 'Uploading…' : 'Submit payment proof'}
-                          </Button>
-                        </>
-                      )}
+                      <Button
+                        component="label"
+                        variant="outlined"
+                        fullWidth
+                        sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}
+                      >
+                        {paymentProofFile?.name || (paymentProof?.status === 'rejected' ? 'Upload new payment proof' : 'Choose payment screenshot or PDF')}
+                        <input
+                          hidden
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,application/pdf"
+                          onChange={(event) => {
+                            setPaymentProofFile(event.target.files?.[0] || null)
+                            event.target.value = ''
+                          }}
+                        />
+                      </Button>
+                      <Button type="submit" variant="contained" disabled={isSubmittingPaymentProof || !paymentProofFile || paymentReference.trim().length < 4}>
+                        {isSubmittingPaymentProof ? 'Uploading…' : 'Submit payment proof'}
+                      </Button>
                     </>
                   )}
                 </Stack>

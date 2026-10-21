@@ -7,6 +7,12 @@ import {
   Container,
   Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Typography,
 } from '@mui/material'
 import { getCustomerOrders } from '../features/orders/orderData.js'
@@ -86,71 +92,75 @@ export default function OrderHistoryPage() {
           <PublicLoading label="Loading your orders…" />
         ) : orders.length || page > 0 ? (
           <>
-            {orders.map((order) => (
-              <Paper key={order.id} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-                <Stack spacing={1.5}>
-                  <Stack
-                    direction={{ xs: 'column', sm: 'row' }}
-                    spacing={1}
-                    sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}
-                  >
-                    <Box>
-                      <Typography variant="h6">{order.order_number}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {formatDate(order.created_at)} · {order.branch?.name || 'Agapé Café'}
-                      </Typography>
-                    </Box>
-                    <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-                      <Chip label={formatStatus(order.status)} size="small" />
-                      <Chip
-                        label={`Payment ${formatStatus(order.payment_status)}`}
-                        size="small"
-                        variant="outlined"
-                      />
-                    </Stack>
-                  </Stack>
-                  <Stack spacing={0.5}>
-                    {order.items?.map((item) => (
-                      <Box key={item.id}>
-                        <Typography>
-                          {item.quantity} × {item.product_name}
-                          {item.variant_name ? ` · ${item.variant_name}` : ''}
-                          {' · '}{formatPrice(item.line_total)}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Unit price with selected options: {formatPrice(item.unit_price)} each
-                        </Typography>
-                        {item.addons?.length > 0 && (
-                          <Typography variant="body2" color="text.secondary">
-                            Add-ons: {item.addons.map((addon) =>
-                              `${addon.addon_name} (${formatPrice(addon.unit_price)} each)`,
-                            ).join(', ')}
+            {orders.length ? (
+              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2.5 }}>
+                <Table size="small" aria-label="Your order history" sx={{ minWidth: 820 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Order</TableCell>
+                      <TableCell>Date</TableCell>
+                      <TableCell>Branch</TableCell>
+                      <TableCell>Items</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Payment</TableCell>
+                      <TableCell align="right">Total</TableCell>
+                      <TableCell align="right">Details</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {orders.map((order) => (
+                      <TableRow key={order.id} hover>
+                        <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          {order.order_number}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {formatDate(order.created_at)}
+                        </TableCell>
+                        <TableCell>{order.branch?.name || 'Agapé Café'}</TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {(order.items || []).reduce((sum, item) => sum + item.quantity, 0)} item(s)
                           </Typography>
-                        )}
-                      </Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {formatStatus(order.fulfillment_method)}
+                            {order.dining_table?.label ? ` · Table ${order.dining_table.label}` : ''}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            color={order.status === 'cancelled' ? 'error' : order.status === 'completed' ? 'success' : 'primary'}
+                            label={formatStatus(order.status)}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            color={order.payment_status === 'paid' ? 'success' : 'default'}
+                            label={formatStatus(order.payment_status)}
+                            size="small"
+                            variant="outlined"
+                          />
+                        </TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap', fontWeight: 700 }}>
+                          {formatPrice(order.total)}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button
+                            component={RouterLink}
+                            to={`/customer/orders/${order.id}`}
+                            size="small"
+                            variant="outlined"
+                            sx={{ whiteSpace: 'nowrap' }}
+                          >
+                            View
+                          </Button>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                    <Typography variant="body2" color="text.secondary">
-                      {order.items?.length || 0} item line(s) · {formatStatus(order.fulfillment_method)}
-                      {order.dining_table?.label ? ` · Table ${order.dining_table.label}` : ''}
-                    </Typography>
-                  </Stack>
-                  <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between' }}>
-                    <Typography fontWeight={700}>Order total</Typography>
-                    <Typography fontWeight={700}>{formatPrice(order.total)}</Typography>
-                  </Stack>
-                  <Button
-                    component={RouterLink}
-                    to={`/customer/orders/${order.id}`}
-                    sx={{ alignSelf: 'flex-start' }}
-                  >
-                    View order
-                  </Button>
-                </Stack>
-              </Paper>
-            ))}
-            {!orders.length && (
-              <EmptyPublicState>No orders remain on this page.</EmptyPublicState>
-            )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : <EmptyPublicState>No orders remain on this page.</EmptyPublicState>}
             <PaginationControls
               page={page}
               pageSize={pageSize}

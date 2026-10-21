@@ -640,11 +640,17 @@ export default function AdminOrdersPage() {
                               [order.benefit_request[0].id]: event.target.value,
                             }))}
                           />
-                          <Stack direction="row" spacing={1}>
+                          <Stack
+                            direction={{ xs: 'column', sm: 'row' }}
+                            spacing={1}
+                            useFlexGap
+                            sx={{ flexWrap: 'wrap', alignItems: { sm: 'center' }, minWidth: 0 }}
+                          >
                             <Button
                               variant="contained"
                               disabled={busyOrderId === order.id || !benefitDocumentUrls[order.benefit_request[0].id]}
                               onClick={() => runOrderAction(order, 'benefit_approved')}
+                              sx={{ maxWidth: '100%', whiteSpace: 'normal' }}
                             >
                               Verify ID and apply discount
                             </Button>
@@ -652,6 +658,7 @@ export default function AdminOrdersPage() {
                               color="error"
                               disabled={busyOrderId === order.id}
                               onClick={() => runOrderAction(order, 'benefit_rejected')}
+                              sx={{ maxWidth: '100%', whiteSpace: 'normal' }}
                             >
                               Reject request
                             </Button>
@@ -680,13 +687,14 @@ export default function AdminOrdersPage() {
                   direction={{ xs: 'column', sm: 'row' }}
                   spacing={1}
                   useFlexGap
-                  sx={{ flexWrap: 'wrap', alignItems: { sm: 'center' } }}
+                  sx={{ flexWrap: 'wrap', alignItems: { sm: 'center' }, minWidth: 0 }}
                 >
                 {canEditOrders && nextStatus[order.status] && (
                   <Button
                     variant="contained"
                     disabled={busyOrderId === order.id}
                     onClick={() => runOrderAction(order, nextStatus[order.status])}
+                    sx={{ maxWidth: '100%', whiteSpace: 'normal' }}
                   >
                     {busyOrderId === order.id ? 'Saving…' : `Mark ${label(nextStatus[order.status])}`}
                   </Button>
@@ -697,6 +705,7 @@ export default function AdminOrdersPage() {
                     variant="outlined"
                     disabled={busyOrderId === order.id}
                     onClick={() => runOrderAction(order, 'paid')}
+                    sx={{ maxWidth: '100%', whiteSpace: 'normal' }}
                   >
                     Record payment
                   </Button>
@@ -733,17 +742,33 @@ export default function AdminOrdersPage() {
                           </Typography>
                         ) : null}
                         {order.payment_proof[0].status === 'pending' && order.benefit_request?.[0]?.status !== 'pending' && (
-                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                          <Stack
+                            direction={{ xs: 'column', md: 'row' }}
+                            spacing={1}
+                            useFlexGap
+                            sx={{ flexWrap: 'wrap', alignItems: { md: 'center' }, minWidth: 0 }}
+                          >
                             <TextField
                               size="small"
                               label="Rejection reason (if rejecting)"
                               value={paymentReviewNotes[order.id] || ''}
                               onChange={(event) => setPaymentReviewNotes((current) => ({ ...current, [order.id]: event.target.value }))}
+                              sx={{ flex: '1 1 220px', minWidth: 0 }}
                             />
-                            <Button variant="contained" disabled={busyOrderId === order.id} onClick={() => runOrderAction(order, 'payment_approved')}>
+                            <Button
+                              variant="contained"
+                              disabled={busyOrderId === order.id}
+                              onClick={() => runOrderAction(order, 'payment_approved')}
+                              sx={{ maxWidth: '100%', whiteSpace: 'normal' }}
+                            >
                               Verify payment
                             </Button>
-                            <Button color="error" disabled={busyOrderId === order.id} onClick={() => runOrderAction(order, 'payment_rejected')}>
+                            <Button
+                              color="error"
+                              disabled={busyOrderId === order.id}
+                              onClick={() => runOrderAction(order, 'payment_rejected')}
+                              sx={{ maxWidth: '100%', whiteSpace: 'normal' }}
+                            >
                               Reject proof
                             </Button>
                           </Stack>
@@ -794,11 +819,13 @@ export default function AdminOrdersPage() {
                         }))
                       }
                       slotProps={{ htmlInput: { maxLength: 500 } }}
+                      sx={{ flex: '1 1 240px', minWidth: 0 }}
                     />
                     <Button
                       color="error"
                       disabled={busyOrderId === order.id}
                       onClick={() => runOrderAction(order, 'cancelled')}
+                      sx={{ maxWidth: '100%', whiteSpace: 'normal' }}
                     >
                       {order.payment_status === 'unpaid' ? 'Void unpaid order' : 'Cancel order'}
                     </Button>
