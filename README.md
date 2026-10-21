@@ -214,6 +214,10 @@ Migration 23 adds an audited manual override for recording GCash payments
 verified outside the submitted-proof workflow; staff must enter a reason.
 Apply it after migrations 21 and 22 on an existing project.
 
+Migration 24 adds an optional Google Maps share link to each branch. Apply it
+after migration 23 on an existing project so branch admins can save map links
+and visitors can open an embedded branch map.
+
 The foundation migration also creates customer profiles and roles for any
 Supabase Auth users that already exist when the schema is installed. If the
 full setup was already installed before that backfill was added, run

@@ -162,7 +162,7 @@ export async function getPublicCategories() {
 export async function getPublicBranches() {
   const { data, error } = await getSupabaseClient()
     .from('branches')
-    .select('id, name, address, phone, email, operating_hours, gcash_qr_path, delivery_enabled, delivery_fee')
+    .select('id, name, address, map_url, phone, email, operating_hours, gcash_qr_path, delivery_enabled, delivery_fee')
     .eq('is_active', true)
     .order('name')
 

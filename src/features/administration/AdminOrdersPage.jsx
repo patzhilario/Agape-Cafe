@@ -7,6 +7,10 @@ import {
   CircularProgress,
   Container,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   InputLabel,
   MenuItem,
@@ -48,6 +52,10 @@ function label(value) {
   return value.split('_').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ')
 }
 
+function getDocumentType(path) {
+  return path.toLowerCase().split('?')[0].endsWith('.pdf') ? 'pdf' : 'image'
+}
+
 export default function AdminOrdersPage() {
   const { account, hasPermission } = useAuth()
   const canEditOrders = account.roles.includes('super_admin') || hasPermission('orders', 'edit')
@@ -69,6 +77,7 @@ export default function AdminOrdersPage() {
   const [manualPaymentOverrideNotes, setManualPaymentOverrideNotes] = useState({})
   const [benefitDocumentUrls, setBenefitDocumentUrls] = useState({})
   const [benefitReviewNotes, setBenefitReviewNotes] = useState({})
+  const [documentPreview, setDocumentPreview] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -415,11 +424,12 @@ export default function AdminOrdersPage() {
                         <>
                           {benefitDocumentUrls[order.benefit_request[0].id] ? (
                             <Button
-                              component="a"
-                              href={benefitDocumentUrls[order.benefit_request[0].id]}
-                              target="_blank"
-                              rel="noreferrer"
                               variant="outlined"
+                              onClick={() => setDocumentPreview({
+                                title: `${label(order.benefit_request[0].benefit_type)} ID · ${order.order_number}`,
+                                url: benefitDocumentUrls[order.benefit_request[0].id],
+                                type: getDocumentType(order.benefit_request[0].document_path),
+                              })}
                               sx={{ alignSelf: 'flex-start' }}
                             >
                               View ID document
@@ -513,7 +523,15 @@ export default function AdminOrdersPage() {
                           </Typography>
                         )}
                         {proofUrls[order.id] ? (
-                          <Button component="a" href={proofUrls[order.id]} target="_blank" rel="noreferrer" variant="outlined" sx={{ alignSelf: 'flex-start' }}>
+                          <Button
+                            variant="outlined"
+                            onClick={() => setDocumentPreview({
+                              title: `GCash payment proof · ${order.order_number}`,
+                              url: proofUrls[order.id],
+                              type: getDocumentType(order.payment_proof[0].document_path),
+                            })}
+                            sx={{ alignSelf: 'flex-start' }}
+                          >
                             View payment proof
                           </Button>
                         ) : order.payment_proof[0].document_path ? (
@@ -612,6 +630,45 @@ export default function AdminOrdersPage() {
           />
         )}
       </Stack>
+      <Dialog
+        open={Boolean(documentPreview)}
+        onClose={() => setDocumentPreview(null)}
+        fullWidth
+        maxWidth="md"
+        aria-labelledby="order-document-preview-title"
+        slotProps={{ paper: { sx: { overflow: 'hidden', borderRadius: 2 } } }}
+      >
+        {documentPreview && (
+          <>
+            <DialogTitle id="order-document-preview-title">{documentPreview.title}</DialogTitle>
+            <DialogContent sx={{ minHeight: { xs: 320, sm: 480 }, display: 'flex', justifyContent: 'center' }}>
+              {documentPreview.type === 'pdf' ? (
+                <Box
+                  component="iframe"
+                  title={documentPreview.title}
+                  src={documentPreview.url}
+                  sx={{ width: '100%', minHeight: { xs: 320, sm: 480 }, border: 0 }}
+                />
+              ) : (
+                <Box
+                  component="img"
+                  src={documentPreview.url}
+                  alt={documentPreview.title}
+                  sx={{
+                    display: 'block',
+                    maxWidth: '100%',
+                    maxHeight: { xs: '60vh', sm: '70vh' },
+                    objectFit: 'contain',
+                  }}
+                />
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => setDocumentPreview(null)}>Close</Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Container>
   )
 }

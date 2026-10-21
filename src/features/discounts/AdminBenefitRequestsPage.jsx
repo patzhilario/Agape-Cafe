@@ -5,6 +5,10 @@ import {
   Button,
   CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   InputLabel,
   MenuItem,
@@ -32,6 +36,10 @@ function label(value) {
   return value.split('_').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ')
 }
 
+function getDocumentType(path) {
+  return path.toLowerCase().split('?')[0].endsWith('.pdf') ? 'pdf' : 'image'
+}
+
 export default function AdminBenefitRequestsPage() {
   const { account, hasPermission } = useAuth()
   const canApprove = account.roles.includes('super_admin') || hasPermission('promotions', 'approve')
@@ -42,6 +50,7 @@ export default function AdminBenefitRequestsPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [reviewNotes, setReviewNotes] = useState({})
   const [documentUrls, setDocumentUrls] = useState({})
+  const [documentPreview, setDocumentPreview] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [busyRequestId, setBusyRequestId] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -86,6 +95,11 @@ export default function AdminBenefitRequestsPage() {
     try {
       const url = await getBenefitDocumentUrl(request.document_path)
       setDocumentUrls((current) => ({ ...current, [request.id]: url }))
+      setDocumentPreview({
+        title: `${label(request.benefit_type)} ID · ${request.order?.order_number || 'Benefit request'}`,
+        url,
+        type: getDocumentType(request.document_path),
+      })
     } catch (error) {
       console.error('Unable to open private benefit evidence.', error)
       setErrorMessage(error.message)
@@ -199,8 +213,12 @@ export default function AdminBenefitRequestsPage() {
               {request.document_path ? (
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                   {documentUrls[request.id] ? (
-                    <Button component="a" href={documentUrls[request.id]} target="_blank" rel="noreferrer">
-                      Open private ID
+                    <Button onClick={() => setDocumentPreview({
+                      title: `${label(request.benefit_type)} ID · ${request.order?.order_number || 'Benefit request'}`,
+                      url: documentUrls[request.id],
+                      type: getDocumentType(request.document_path),
+                    })}>
+                      View ID evidence
                     </Button>
                   ) : (
                     <Button onClick={() => openDocument(request)}>View ID evidence (60-second link)</Button>
@@ -249,6 +267,45 @@ export default function AdminBenefitRequestsPage() {
           />
         )}
       </Stack>
+      <Dialog
+        open={Boolean(documentPreview)}
+        onClose={() => setDocumentPreview(null)}
+        fullWidth
+        maxWidth="md"
+        aria-labelledby="benefit-document-preview-title"
+        slotProps={{ paper: { sx: { overflow: 'hidden', borderRadius: 2 } } }}
+      >
+        {documentPreview && (
+          <>
+            <DialogTitle id="benefit-document-preview-title">{documentPreview.title}</DialogTitle>
+            <DialogContent sx={{ minHeight: { xs: 320, sm: 480 }, display: 'flex', justifyContent: 'center' }}>
+              {documentPreview.type === 'pdf' ? (
+                <Box
+                  component="iframe"
+                  title={documentPreview.title}
+                  src={documentPreview.url}
+                  sx={{ width: '100%', minHeight: { xs: 320, sm: 480 }, border: 0 }}
+                />
+              ) : (
+                <Box
+                  component="img"
+                  src={documentPreview.url}
+                  alt={documentPreview.title}
+                  sx={{
+                    display: 'block',
+                    maxWidth: '100%',
+                    maxHeight: { xs: '60vh', sm: '70vh' },
+                    objectFit: 'contain',
+                  }}
+                />
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => setDocumentPreview(null)}>Close</Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Container>
   )
 }

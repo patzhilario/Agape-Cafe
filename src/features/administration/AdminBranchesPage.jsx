@@ -25,6 +25,7 @@ const emptyBranch = {
   id: '',
   name: '',
   address: '',
+  map_url: '',
   phone: '',
   email: '',
   is_active: true,
@@ -48,7 +49,7 @@ export default function AdminBranchesPage() {
     let active = true
     getSupabaseClient()
       .from('branches')
-      .select('id, name, address, phone, email, is_active, gcash_qr_path, delivery_enabled, delivery_fee')
+      .select('id, name, address, map_url, phone, email, is_active, gcash_qr_path, delivery_enabled, delivery_fee')
       .order('name')
       .then(({ data, error }) => {
         if (error) throw new Error(error.message)
@@ -98,10 +99,28 @@ export default function AdminBranchesPage() {
       setErrorMessage('Enter a valid non-negative delivery fee.')
       return
     }
+    const mapUrl = draft.map_url.trim()
+    if (mapUrl) {
+      try {
+        const parsedMapUrl = new URL(mapUrl)
+        const isGoogleMapsHost =
+          parsedMapUrl.hostname === 'google.com' ||
+          parsedMapUrl.hostname.endsWith('.google.com') ||
+          parsedMapUrl.hostname === 'maps.app.goo.gl' ||
+          parsedMapUrl.hostname === 'goo.gl'
+        if (parsedMapUrl.protocol !== 'https:' || !isGoogleMapsHost) {
+          throw new Error('Use a secure Google Maps link.')
+        }
+      } catch {
+        setErrorMessage('Enter a valid HTTPS Google Maps link.')
+        return
+      }
+    }
     setIsSaving(true)
     const payload = {
       name: draft.name.trim(),
       address: draft.address.trim(),
+      map_url: mapUrl || null,
       phone: draft.phone.trim() || null,
       email: draft.email.trim() || null,
       is_active: draft.is_active,
@@ -231,6 +250,15 @@ export default function AdminBranchesPage() {
               {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
               <TextField autoFocus label="Branch name" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} required slotProps={{ htmlInput: { maxLength: 120 } }} />
               <TextField label="Address" value={draft.address} onChange={(event) => setDraft((current) => ({ ...current, address: event.target.value }))} multiline minRows={2} required slotProps={{ htmlInput: { maxLength: 500 } }} />
+              <TextField
+                label="Google Maps link (optional)"
+                type="url"
+                value={draft.map_url || ''}
+                onChange={(event) => setDraft((current) => ({ ...current, map_url: event.target.value }))}
+                placeholder="https://maps.app.goo.gl/..."
+                helperText="Paste the branch's Google Maps share link. Visitors can preview the location or open it in Maps."
+                slotProps={{ htmlInput: { maxLength: 2048 } }}
+              />
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                 <TextField fullWidth label="Phone (optional)" value={draft.phone || ''} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} slotProps={{ htmlInput: { maxLength: 40 } }} />
                 <TextField fullWidth label="Email (optional)" type="email" value={draft.email || ''} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} slotProps={{ htmlInput: { maxLength: 254 } }} />
