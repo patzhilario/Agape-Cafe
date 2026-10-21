@@ -131,6 +131,7 @@ export default function OrderHistoryPage() {
                     ))}
                     <Typography variant="body2" color="text.secondary">
                       {order.items?.length || 0} item line(s) · {formatStatus(order.fulfillment_method)}
+                      {order.dining_table?.label ? ` · Table ${order.dining_table.label}` : ''}
                     </Typography>
                   </Stack>
                   <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between' }}>

@@ -51,9 +51,13 @@ export default function AdminBranchesPage() {
   const [branches, setBranches] = useState([])
   const [draft, setDraft] = useState(emptyBranch)
   const [branchPaymentMethods, setBranchPaymentMethods] = useState([])
+  const [branchDiningTables, setBranchDiningTables] = useState([])
+  const [branchDiningTableOrders, setBranchDiningTableOrders] = useState([])
+  const [diningTableDraft, setDiningTableDraft] = useState({ id: '', label: '' })
   const [paymentDraft, setPaymentDraft] = useState(emptyPaymentMethod)
   const [paymentQrFile, setPaymentQrFile] = useState(null)
   const [isLoadingPaymentMethods, setIsLoadingPaymentMethods] = useState(false)
+  const [isSavingDiningTable, setIsSavingDiningTable] = useState(false)
   const [isSavingPaymentMethod, setIsSavingPaymentMethod] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -88,6 +92,9 @@ export default function AdminBranchesPage() {
   function openNewBranch() {
     setDraft(emptyBranch)
     setBranchPaymentMethods([])
+    setBranchDiningTables([])
+    setBranchDiningTableOrders([])
+    setDiningTableDraft({ id: '', label: '' })
     setIsLoadingPaymentMethods(false)
     setPaymentDraft(emptyPaymentMethod)
     setPaymentQrFile(null)
@@ -97,6 +104,9 @@ export default function AdminBranchesPage() {
 
   function openEditBranch(branch) {
     setDraft({ ...branch })
+    setBranchDiningTables([])
+    setBranchDiningTableOrders([])
+    setDiningTableDraft({ id: '', label: '' })
     setPaymentDraft(emptyPaymentMethod)
     setPaymentQrFile(null)
     setErrorMessage('')
@@ -116,6 +126,34 @@ export default function AdminBranchesPage() {
         setErrorMessage(error.message)
       })
       .finally(() => setIsLoadingPaymentMethods(false))
+    getSupabaseClient()
+      .from('branch_dining_tables')
+      .select('id, label, is_active')
+      .eq('branch_id', branch.id)
+      .order('label')
+      .then(({ data, error }) => {
+        if (error) throw new Error(error.message)
+        setBranchDiningTables(data)
+      })
+      .catch((error) => {
+        console.error('Unable to load branch dining tables.', error)
+        setErrorMessage(error.message)
+      })
+    getSupabaseClient()
+      .from('orders')
+      .select('id, order_number, status, dining_table_id')
+      .eq('branch_id', branch.id)
+      .eq('fulfillment_method', 'dine_in')
+      .not('status', 'in', '(cancelled,completed)')
+      .not('dining_table_id', 'is', null)
+      .then(({ data, error }) => {
+        if (error) throw new Error(error.message)
+        setBranchDiningTableOrders(data)
+      })
+      .catch((error) => {
+        console.error('Unable to load active dine-in table orders.', error)
+        setErrorMessage(error.message)
+      })
   }
 
   async function saveBranch(event) {
@@ -277,6 +315,59 @@ export default function AdminBranchesPage() {
     ))
   }
 
+  async function saveDiningTable() {
+    if (!draft.id) return
+    const label = diningTableDraft.label.trim()
+    if (label.length < 1 || label.length > 40) {
+      setErrorMessage('Enter a table name or number between 1 and 40 characters.')
+      return
+    }
+    setIsSavingDiningTable(true)
+    setErrorMessage('')
+    try {
+      const result = diningTableDraft.id
+        ? await getSupabaseClient()
+          .from('branch_dining_tables')
+          .update({ label })
+          .eq('id', diningTableDraft.id)
+          .eq('branch_id', draft.id)
+        : await getSupabaseClient()
+          .from('branch_dining_tables')
+          .insert({ branch_id: draft.id, label })
+      if (result.error) throw new Error(result.error.message)
+      setDiningTableDraft({ id: '', label: '' })
+      const { data, error } = await getSupabaseClient()
+        .from('branch_dining_tables')
+        .select('id, label, is_active')
+        .eq('branch_id', draft.id)
+        .order('label')
+      if (error) throw new Error(error.message)
+      setBranchDiningTables(data)
+    } catch (error) {
+      console.error('Unable to save branch dining table.', error)
+      setErrorMessage(error.message)
+    } finally {
+      setIsSavingDiningTable(false)
+    }
+  }
+
+  async function setDiningTableActive(table, isActive) {
+    setErrorMessage('')
+    const { error } = await getSupabaseClient()
+      .from('branch_dining_tables')
+      .update({ is_active: isActive })
+      .eq('id', table.id)
+      .eq('branch_id', draft.id)
+    if (error) {
+      console.error('Unable to update branch dining table.', error)
+      setErrorMessage(error.message)
+      return
+    }
+    setBranchDiningTables((current) => current.map((entry) =>
+      entry.id === table.id ? { ...entry, is_active: isActive } : entry,
+    ))
+  }
+
   async function toggleBranch(branch, isActive) {
     setErrorMessage('')
     setSuccessMessage('')
@@ -343,7 +434,12 @@ export default function AdminBranchesPage() {
           <Alert severity="info">No branches have been created. Add the first branch to configure locations and staff access.</Alert>
         )}
       </Stack>
-      <Dialog open={dialogOpen} onClose={() => !isSaving && !isSavingPaymentMethod && setDialogOpen(false)} fullWidth maxWidth="md">
+      <Dialog
+        open={dialogOpen}
+        onClose={() => !isSaving && !isSavingPaymentMethod && !isSavingDiningTable && setDialogOpen(false)}
+        fullWidth
+        maxWidth="md"
+      >
         <Box component="form" onSubmit={saveBranch}>
           <DialogTitle>{draft.id ? 'Edit branch' : 'Add branch'}</DialogTitle>
           <DialogContent>
@@ -445,6 +541,84 @@ export default function AdminBranchesPage() {
                       )}
                     </Stack>
                   )}
+                  <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                    <Stack spacing={1.5}>
+                      <Box>
+                        <Typography variant="h6">Dine-in tables</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Add table names or numbers for this branch. An active dine-in order holds its table until staff completes or voids the order.
+                        </Typography>
+                      </Box>
+                      {branchDiningTables.map((table) => {
+                        const activeOrder = branchDiningTableOrders.find(
+                          (order) => order.dining_table_id === table.id,
+                        )
+                        return (
+                          <Paper key={table.id} variant="outlined" sx={{ p: 1.25 }}>
+                            <Stack
+                              direction={{ xs: 'column', sm: 'row' }}
+                              spacing={1}
+                              sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
+                            >
+                              <Typography fontWeight={700}>
+                                {table.label} · {activeOrder ? `Occupied · ${activeOrder.order_number}` : 'Available'}
+                                {!table.is_active && ' · Disabled'}
+                              </Typography>
+                              <Stack direction="row" spacing={1}>
+                                <Button
+                                  type="button"
+                                  size="small"
+                                  onClick={() => setDiningTableDraft({ id: table.id, label: table.label })}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="small"
+                                  color={table.is_active ? 'error' : 'primary'}
+                                  onClick={() => void setDiningTableActive(table, !table.is_active)}
+                                >
+                                  {table.is_active ? 'Disable' : 'Enable'}
+                                </Button>
+                              </Stack>
+                            </Stack>
+                          </Paper>
+                        )
+                      })}
+                      {!branchDiningTables.length && (
+                        <Alert severity="info">No dine-in tables are configured for this branch.</Alert>
+                      )}
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                        <TextField
+                          fullWidth
+                          label={diningTableDraft.id ? 'Edit table name or number' : 'New table name or number'}
+                          value={diningTableDraft.label}
+                          onChange={(event) => setDiningTableDraft((current) => ({
+                            ...current,
+                            label: event.target.value,
+                          }))}
+                          slotProps={{ htmlInput: { maxLength: 40 } }}
+                        />
+                        <Button
+                          type="button"
+                          variant="contained"
+                          onClick={() => void saveDiningTable()}
+                          disabled={isSavingDiningTable}
+                          sx={{ whiteSpace: 'nowrap' }}
+                        >
+                          {diningTableDraft.id ? 'Save table' : 'Add table'}
+                        </Button>
+                        {diningTableDraft.id && (
+                          <Button
+                            type="button"
+                            onClick={() => setDiningTableDraft({ id: '', label: '' })}
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                      </Stack>
+                    </Stack>
+                  </Box>
                   <Typography variant="subtitle1" fontWeight={700}>
                     {paymentDraft.id ? `Edit ${paymentDraft.name}` : 'Add payment method'}
                   </Typography>
@@ -549,7 +723,7 @@ export default function AdminBranchesPage() {
             </Stack>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDialogOpen(false)} disabled={isSaving || isSavingPaymentMethod}>Cancel</Button>
+            <Button onClick={() => setDialogOpen(false)} disabled={isSaving || isSavingPaymentMethod || isSavingDiningTable}>Cancel</Button>
             <Button type="submit" variant="contained" disabled={isSaving}>{isSaving ? 'Saving…' : draft.id ? 'Save branch' : 'Create branch'}</Button>
           </DialogActions>
         </Box>

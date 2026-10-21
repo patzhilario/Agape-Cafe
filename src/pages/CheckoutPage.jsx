@@ -24,6 +24,7 @@ import { useCart } from '../features/orders/useCart.js'
 import { getCartItemKey } from '../features/orders/cartUtils.js'
 import {
   createCustomerOrder,
+  getAvailableDiningTables,
   getAvailablePaymentMethods,
   getEligiblePromotions,
   submitOrderPaymentProof,
@@ -59,6 +60,9 @@ export default function CheckoutPage({ panel = false }) {
   const [branches, setBranches] = useState([])
   const [paymentMethods, setPaymentMethods] = useState([])
   const [paymentMethodsBranchId, setPaymentMethodsBranchId] = useState('')
+  const [diningTables, setDiningTables] = useState([])
+  const [diningTablesBranchId, setDiningTablesBranchId] = useState('')
+  const [diningTableId, setDiningTableId] = useState('')
   const [promotions, setPromotions] = useState([])
   const [phone, setPhone] = useState(account.phone || '')
   const [deliveryAddress, setDeliveryAddress] = useState(account.address || '')
@@ -111,6 +115,24 @@ export default function CheckoutPage({ panel = false }) {
       return total + lineDiscount
     }, 0)
     : 0
+  const isOnsiteFulfillment = fulfillment === 'dine_in' || fulfillment === 'takeout'
+
+  useEffect(() => {
+    let active = true
+    if (fulfillment !== 'dine_in' || !branchId) return () => { active = false }
+    getAvailableDiningTables(branchId)
+      .then((tables) => {
+        if (!active) return
+        setDiningTables(tables)
+        setDiningTablesBranchId(branchId)
+        setDiningTableId((current) => tables.some((table) => table.id === current) ? current : '')
+      })
+      .catch((error) => {
+        console.error('Unable to load available dining tables.', error)
+        if (active) setErrorMessage(error.message)
+      })
+    return () => { active = false }
+  }, [branchId, fulfillment])
 
   useEffect(() => {
     let active = true
@@ -141,7 +163,8 @@ export default function CheckoutPage({ panel = false }) {
         if (!active) return
         setPaymentMethods(methods)
         setPaymentMethodsBranchId(branchId)
-        const availableMethods = fulfillment === 'delivery'
+        const onlineOnly = fulfillment === 'delivery' || fulfillment === 'pickup'
+        const availableMethods = onlineOnly
           ? methods.filter((method) => method.settlement_type === 'provider' && method.qr_code_path)
           : methods
         setPaymentMethodId((current) =>
@@ -183,11 +206,13 @@ export default function CheckoutPage({ panel = false }) {
 
   const selectedBranch = branches.find((branch) => branch.id === branchId)
   const branchPaymentMethods = paymentMethodsBranchId === branchId ? paymentMethods : []
+  const availableDiningTables = diningTablesBranchId === branchId ? diningTables : []
   const onlinePaymentMethods = branchPaymentMethods.filter(
     (method) => method.settlement_type === 'provider' && method.qr_code_path,
   )
   const canPayOnline = onlinePaymentMethods.length > 0
-  const availablePaymentMethods = fulfillment === 'delivery'
+  const onlineOnly = fulfillment === 'delivery' || fulfillment === 'pickup'
+  const availablePaymentMethods = onlineOnly
     ? onlinePaymentMethods
     : branchPaymentMethods
   const selectedPaymentMethod = availablePaymentMethods.find((method) => method.id === paymentMethodId)
@@ -255,14 +280,14 @@ export default function CheckoutPage({ panel = false }) {
     const selectedPaymentMethod = availablePaymentMethods.find((method) => method.id === paymentMethodId)
     if (!selectedPaymentMethod) {
       setErrorMessage(
-        fulfillment === 'delivery'
-          ? 'Delivery requires an enabled online QR payment method at the selected branch.'
+        onlineOnly
+          ? `${fulfillment === 'delivery' ? 'Delivery' : 'Pick-up'} requires an enabled online QR payment method at the selected branch.`
           : 'Choose an available payment method.',
       )
       return
     }
-    if (fulfillment === 'delivery' && selectedPaymentMethod.settlement_type !== 'provider') {
-      setErrorMessage('Delivery orders require an online QR payment method.')
+    if (onlineOnly && selectedPaymentMethod.settlement_type !== 'provider') {
+      setErrorMessage('Pick-up and delivery orders require an online QR payment method.')
       return
     }
     if (selectedPaymentMethod.settlement_type === 'provider' && !selectedPaymentMethod.qr_code_path) {
@@ -301,6 +326,10 @@ export default function CheckoutPage({ panel = false }) {
         return
       }
     }
+    if (fulfillment === 'dine_in' && !diningTableId) {
+      setErrorMessage('Choose the table where you are seated.')
+      return
+    }
     if (branchDataLoading) {
       setErrorMessage('Wait for the selected branch availability check to finish.')
       return
@@ -313,6 +342,7 @@ export default function CheckoutPage({ panel = false }) {
     const requestPayload = {
       branchId,
       fulfillment,
+      diningTableId: fulfillment === 'dine_in' ? diningTableId : '',
       deliveryAddress: fulfillment === 'delivery' ? deliveryAddress.trim() : '',
       paymentMethodId,
       phone: phone.trim(),
@@ -370,6 +400,7 @@ export default function CheckoutPage({ panel = false }) {
       const orderId = await createCustomerOrder({
         branchId,
         fulfillment,
+        diningTableId: fulfillment === 'dine_in' ? diningTableId : null,
         deliveryAddress: fulfillment === 'delivery' ? deliveryAddress.trim() : '',
         paymentMethodId,
         requestId: requestRef.current.id,
@@ -430,6 +461,17 @@ export default function CheckoutPage({ panel = false }) {
           if (cleanupError) console.error('Unable to remove the unlinked ID document.', cleanupError)
         }
         setErrorMessage(error.message)
+        if (fulfillment === 'dine_in') {
+          getAvailableDiningTables(branchId)
+            .then((tables) => {
+              setDiningTables(tables)
+              setDiningTablesBranchId(branchId)
+              setDiningTableId((current) => tables.some((table) => table.id === current) ? current : '')
+            })
+            .catch((refreshError) => {
+              console.error('Unable to refresh available dining tables after checkout failure.', refreshError)
+            })
+        }
       }
     } finally {
       setIsSubmitting(false)
@@ -507,6 +549,8 @@ export default function CheckoutPage({ panel = false }) {
                 onChange={(event) => {
                   setBranchId(event.target.value)
                   setPaymentMethodId('')
+                  setDiningTableId('')
+                  setDiningTablesBranchId('')
                   setDataKey('')
                   setLoadError('')
                 }}
@@ -518,9 +562,12 @@ export default function CheckoutPage({ panel = false }) {
                 ))}
               </Select>
             </FormControl>
-            {benefitPolicy?.is_active && (benefitPolicy.pwd_enabled || benefitPolicy.senior_citizen_enabled) && (
+            {isOnsiteFulfillment && benefitPolicy?.is_active && (benefitPolicy.pwd_enabled || benefitPolicy.senior_citizen_enabled) && (
               <Paper variant="outlined" sx={{ p: 2 }}>
                 <Stack spacing={1.5}>
+                  <Typography variant="body2" color="text.secondary">
+                    Available only for Dine-in or Take-out orders placed at the café. Staff will verify the ID before applying the discount.
+                  </Typography>
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -630,6 +677,11 @@ export default function CheckoutPage({ panel = false }) {
                 </Stack>
               </Paper>
             )}
+            {!isOnsiteFulfillment && benefitPolicy?.is_active && (benefitPolicy.pwd_enabled || benefitPolicy.senior_citizen_enabled) && (
+              <Alert severity="info">
+                PWD/Senior Citizen discounts are available only for Dine-in or Take-out orders placed at the café.
+              </Alert>
+            )}
             {selectedBranch && (
               <Typography variant="body2" color="text.secondary">
                 {selectedBranch.address}
@@ -641,17 +693,30 @@ export default function CheckoutPage({ panel = false }) {
                 value={fulfillment}
                 onChange={(event) => {
                   const nextFulfillment = event.target.value
-                  const nextMethods = nextFulfillment === 'delivery'
+                  const nextMethods = nextFulfillment === 'delivery' || nextFulfillment === 'pickup'
                     ? onlinePaymentMethods
                     : branchPaymentMethods
                   setFulfillment(nextFulfillment)
+                  setDiningTableId('')
+                  if (nextFulfillment !== 'dine_in' && nextFulfillment !== 'takeout') {
+                    setRequestBenefit(false)
+                    setBenefitDocument(null)
+                    setBenefitQuantities({})
+                  }
                   if (!nextMethods.some((method) => method.id === paymentMethodId)) {
                     setPaymentMethodId(nextMethods[0]?.id || '')
                   }
                   setErrorMessage('')
                 }}
               >
-                <FormControlLabel value="pickup" control={<Radio />} label="Pick-up" />
+                <FormControlLabel value="dine_in" control={<Radio />} label="Dine-in" />
+                <FormControlLabel
+                  value="pickup"
+                  control={<Radio />}
+                  disabled={!canPayOnline}
+                  label="Pick-up · Online payment"
+                />
+                <FormControlLabel value="takeout" control={<Radio />} label="Take-out" />
                 <FormControlLabel
                   value="delivery"
                   control={<Radio />}
@@ -666,6 +731,52 @@ export default function CheckoutPage({ panel = false }) {
               <Alert severity="warning">
                 Delivery requires at least one online QR payment method configured for this branch.
               </Alert>
+            )}
+            {fulfillment === 'dine_in' && (
+              <FormControl fullWidth required>
+                <InputLabel id="checkout-dining-table-label">Your table</InputLabel>
+                <Select
+                  labelId="checkout-dining-table-label"
+                  label="Your table"
+                  value={diningTableId}
+                  onChange={(event) => setDiningTableId(event.target.value)}
+                  disabled={!branchId || diningTablesBranchId !== branchId}
+                >
+                  <MenuItem value="" disabled>
+                    {availableDiningTables.length
+                      ? 'Choose the table where you are seated'
+                      : 'No available tables. Ask staff or refresh the table list.'}
+                  </MenuItem>
+                  {availableDiningTables.map((table) => (
+                    <MenuItem key={table.id} value={table.id}>{table.label}</MenuItem>
+                  ))}
+                </Select>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Choose the table where you are seated. It will be held for this order until staff closes or voids it.
+                </Typography>
+                <Button
+                  type="button"
+                  size="small"
+                  sx={{ alignSelf: 'flex-start', mt: 0.5 }}
+                  disabled={!branchId}
+                  onClick={() => {
+                    setDiningTablesBranchId('')
+                    setDiningTableId('')
+                    getAvailableDiningTables(branchId)
+                      .then((tables) => {
+                        setDiningTables(tables)
+                        setDiningTablesBranchId(branchId)
+                        setDiningTableId((current) => tables.some((table) => table.id === current) ? current : '')
+                      })
+                      .catch((error) => {
+                        console.error('Unable to refresh available dining tables.', error)
+                        setErrorMessage(error.message)
+                      })
+                  }}
+                >
+                  Refresh available tables
+                </Button>
+              </FormControl>
             )}
             {fulfillment === 'delivery' && (
               <>
@@ -708,7 +819,7 @@ export default function CheckoutPage({ panel = false }) {
             />
             <Box>
               <Typography variant="subtitle1" fontWeight={700}>Payment method</Typography>
-              {fulfillment === 'pickup' && (
+              {isOnsiteFulfillment && (
                 <>
                   {availablePaymentMethods.some((method) => method.settlement_type === 'pay_at_branch') && (
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
@@ -750,7 +861,7 @@ export default function CheckoutPage({ panel = false }) {
                       setErrorMessage('')
                     }}
                   >
-                    {fulfillment === 'pickup' && <MenuItem value="">Select an online payment method</MenuItem>}
+                    <MenuItem value="">Select an online payment method</MenuItem>
                     {onlinePaymentMethods.map((method) => (
                       <MenuItem key={method.id} value={method.id}>
                         {method.name}
@@ -759,9 +870,11 @@ export default function CheckoutPage({ panel = false }) {
                   </Select>
                 </FormControl>
               )}
-              {!availablePaymentMethods.length && fulfillment === 'pickup' && (
+              {!availablePaymentMethods.length && fulfillment !== 'delivery' && (
                 <Typography variant="body2" color="error">
-                  No payment methods are currently enabled for this branch.
+                  {fulfillment === 'pickup'
+                    ? 'No online payment methods are currently enabled for this branch.'
+                    : 'No payment methods are currently enabled for this branch.'}
                 </Typography>
               )}
               {!availablePaymentMethods.length && fulfillment === 'delivery' && (

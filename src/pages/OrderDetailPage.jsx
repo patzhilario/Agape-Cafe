@@ -229,7 +229,10 @@ export default function OrderDetailPage() {
                 {order.branch?.address && (
                   <Typography color="text.secondary">{order.branch.address}</Typography>
                 )}
-                <Typography>{formatStatus(order.fulfillment_method)}</Typography>
+                <Typography>
+                  {formatStatus(order.fulfillment_method)}
+                  {order.dining_table?.label ? ` · Table ${order.dining_table.label}` : ''}
+                </Typography>
                 {order.fulfillment_method === 'delivery' && (
                   <>
                     <Typography>Delivery address: {order.delivery_address}</Typography>

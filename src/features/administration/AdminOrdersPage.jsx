@@ -337,6 +337,7 @@ export default function AdminOrdersPage() {
                       <Typography fontWeight={700}>{order.branch?.name || 'Branch'}</Typography>
                       <Typography variant="body2" color="text.secondary">
                         {label(order.fulfillment_method)}
+                        {order.dining_table?.label ? ` · Table ${order.dining_table.label}` : ''}
                         {order.fulfillment_method === 'delivery' && order.delivery_address
                           ? ` · ${order.delivery_address}`
                           : ''}
@@ -590,7 +591,7 @@ export default function AdminOrdersPage() {
                   <>
                     <TextField
                       size="small"
-                      label="Cancellation reason"
+                      label={order.payment_status === 'unpaid' ? 'Void reason' : 'Cancellation reason'}
                       value={cancelReasons[order.id] || ''}
                       onChange={(event) =>
                         setCancelReasons((current) => ({
@@ -605,7 +606,7 @@ export default function AdminOrdersPage() {
                       disabled={busyOrderId === order.id}
                       onClick={() => runOrderAction(order, 'cancelled')}
                     >
-                      Cancel order
+                      {order.payment_status === 'unpaid' ? 'Void unpaid order' : 'Cancel order'}
                     </Button>
                   </>
                 )}

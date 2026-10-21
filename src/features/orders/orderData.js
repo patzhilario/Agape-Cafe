@@ -13,6 +13,14 @@ export async function getAvailablePaymentMethods(branchId) {
   return data
 }
 
+export async function getAvailableDiningTables(branchId) {
+  const { data, error } = await getSupabaseClient().rpc('get_available_dining_tables', {
+    target_branch_id: branchId,
+  })
+  if (error) throw new Error(`Could not load available dining tables: ${error.message}`)
+  return data
+}
+
 export async function getEligiblePromotions(productIds) {
   const { data, error } = await getSupabaseClient()
     .from('promotions')
@@ -35,6 +43,7 @@ export async function getEligiblePromotions(productIds) {
 export async function createCustomerOrder({
   branchId,
   fulfillment,
+  diningTableId,
   paymentMethodId,
   requestId,
   phone,
@@ -50,7 +59,7 @@ export async function createCustomerOrder({
     addon_ids: item.addons.map((addon) => addon.id),
     quantity: item.quantity,
   }))
-  const { data, error } = await getSupabaseClient().rpc('create_customer_order_with_benefit', {
+  const { data, error } = await getSupabaseClient().rpc('create_customer_order_with_table', {
     target_branch_id: branchId,
     fulfillment,
     payment_method_id: paymentMethodId,
@@ -69,6 +78,7 @@ export async function createCustomerOrder({
       eligible_quantity: item.quantity,
     })) || null,
     uploaded_benefit_document_path: benefitRequest?.documentPath || null,
+    target_dining_table_id: diningTableId || null,
   })
 
   if (error) {
@@ -83,7 +93,7 @@ export async function getCustomerOrders(page = 0, pageSize = 25) {
     .from('orders')
     .select(`
       id, order_number, branch_id, customer_name, customer_phone,
-      fulfillment_method, customer_note, delivery_address, delivery_fee, status, payment_status,
+      fulfillment_method, dining_table:branch_dining_tables(label), customer_note, delivery_address, delivery_fee, status, payment_status,
       subtotal, discount_total, total, created_at,
       branch:branches(name),
       items:order_items(
@@ -108,7 +118,7 @@ export async function getCustomerOrder(orderId) {
     .from('orders')
     .select(`
       id, order_number, branch_id, customer_name, customer_email, customer_phone,
-      fulfillment_method, customer_note, delivery_address, delivery_fee, status, payment_status,
+      fulfillment_method, dining_table:branch_dining_tables(label), customer_note, delivery_address, delivery_fee, status, payment_status,
       subtotal, discount_total, total, promotion_id, created_at, cancellation_reason,
       branch:branches(name, address, phone, gcash_qr_path),
       items:order_items(

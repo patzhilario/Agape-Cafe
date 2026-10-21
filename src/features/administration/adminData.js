@@ -21,7 +21,7 @@ export async function getOrders(branchId, page = 0, pageSize = 50) {
     .from('orders')
     .select(`
       id, order_number, branch_id, customer_name, customer_phone,
-      fulfillment_method, customer_note, delivery_address, delivery_fee, status, payment_status,
+      fulfillment_method, dining_table:branch_dining_tables(label), customer_note, delivery_address, delivery_fee, status, payment_status,
       subtotal, discount_total, total, created_at, cancellation_reason,
       branch:branches(name),
       items:order_items(
