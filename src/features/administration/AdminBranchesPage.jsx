@@ -23,7 +23,6 @@ import {
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
-import { formatPrice } from '../public/publicData.js'
 
 const emptyBranch = {
   id: '',
@@ -34,7 +33,6 @@ const emptyBranch = {
   email: '',
   is_active: true,
   delivery_enabled: false,
-  delivery_fee: '0',
 }
 
 const emptyPaymentMethod = {
@@ -70,7 +68,7 @@ export default function AdminBranchesPage() {
     let active = true
     getSupabaseClient()
       .from('branches')
-      .select('id, name, address, map_url, phone, email, is_active, delivery_enabled, delivery_fee')
+      .select('id, name, address, map_url, phone, email, is_active, delivery_enabled')
       .order('name')
       .then(({ data, error }) => {
         if (error) throw new Error(error.message)
@@ -160,11 +158,6 @@ export default function AdminBranchesPage() {
     event.preventDefault()
     setErrorMessage('')
     setSuccessMessage('')
-    const deliveryFee = Number(draft.delivery_fee)
-    if (!Number.isFinite(deliveryFee) || deliveryFee < 0) {
-      setErrorMessage('Enter a valid non-negative delivery fee.')
-      return
-    }
     const mapUrl = draft.map_url.trim()
     if (mapUrl) {
       try {
@@ -191,7 +184,6 @@ export default function AdminBranchesPage() {
       email: draft.email.trim() || null,
       is_active: draft.is_active,
       delivery_enabled: draft.delivery_enabled,
-      delivery_fee: deliveryFee,
     }
     try {
       const supabase = getSupabaseClient()
@@ -410,11 +402,7 @@ export default function AdminBranchesPage() {
                       <Typography variant="h6">{branch.name}</Typography>
                       <Typography color="text.secondary">{branch.address || 'No address added'}</Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Delivery: {branch.delivery_enabled
-                          ? Number(branch.delivery_fee) > 0
-                            ? formatPrice(branch.delivery_fee)
-                            : 'Free'
-                          : 'Off'}
+                        Delivery: {branch.delivery_enabled ? 'Available · booking fee paid by customer' : 'Off'}
                       </Typography>
                     </Box>
                     <Button size="small" startIcon={<EditIcon />} onClick={() => openEditBranch(branch)}>Edit</Button>
@@ -464,15 +452,6 @@ export default function AdminBranchesPage() {
               <FormControlLabel
                 control={<Switch checked={Boolean(draft.delivery_enabled)} onChange={(event) => setDraft((current) => ({ ...current, delivery_enabled: event.target.checked }))} />}
                 label="Offer delivery"
-              />
-              <TextField
-                label="Delivery fee (PHP)"
-                type="number"
-                value={draft.delivery_fee ?? '0'}
-                onChange={(event) => setDraft((current) => ({ ...current, delivery_fee: event.target.value }))}
-                disabled={!draft.delivery_enabled}
-                slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
-                helperText="Set to 0 for free delivery. Delivery is off for new branches until enabled."
               />
               {draft.id && (
                 <Stack spacing={2} sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>

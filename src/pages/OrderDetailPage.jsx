@@ -236,7 +236,9 @@ export default function OrderDetailPage() {
                 {order.fulfillment_method === 'delivery' && (
                   <>
                     <Typography>Delivery address: {order.delivery_address}</Typography>
-                    <Typography>Café delivery charge: {formatPrice(order.delivery_fee)}</Typography>
+                    {Number(order.delivery_fee) > 0 && (
+                      <Typography>Café delivery charge: {formatPrice(order.delivery_fee)}</Typography>
+                    )}
                     <Alert severity="info">
                       The delivery rider or booking fee is paid separately by the customer directly to the rider/service.
                     </Alert>
@@ -291,7 +293,7 @@ export default function OrderDetailPage() {
                   <Typography>Subtotal</Typography>
                   <Typography>{formatPrice(order.subtotal)}</Typography>
                 </Stack>
-                {order.fulfillment_method === 'delivery' && (
+                {order.fulfillment_method === 'delivery' && Number(order.delivery_fee) > 0 && (
                   <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between' }}>
                     <Typography>Café delivery charge</Typography>
                     <Typography>{formatPrice(order.delivery_fee)}</Typography>

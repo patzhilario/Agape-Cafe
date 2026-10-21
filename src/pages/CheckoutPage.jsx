@@ -722,7 +722,7 @@ export default function CheckoutPage({ panel = false }) {
                   control={<Radio />}
                   disabled={!selectedBranch?.delivery_enabled || !canPayOnline}
                   label={`Delivery · ${selectedBranch?.delivery_enabled
-                    ? Number(selectedBranch.delivery_fee) ? formatPrice(selectedBranch.delivery_fee) : 'No café delivery charge'
+                    ? 'booking fee paid separately'
                     : 'Unavailable at this branch'}`}
                 />
               </RadioGroup>
@@ -779,22 +779,17 @@ export default function CheckoutPage({ panel = false }) {
               </FormControl>
             )}
             {fulfillment === 'delivery' && (
-              <>
-                <TextField
-                  label="Delivery address"
-                  value={deliveryAddress}
-                  onChange={(event) => setDeliveryAddress(event.target.value)}
-                  required
-                  autoComplete="street-address"
-                  multiline
-                  minRows={2}
-                  slotProps={{ htmlInput: { minLength: 8, maxLength: 500 } }}
-                  helperText="Enter the complete address and any useful landmark."
-                />
-                <Alert severity="info">
-                  The delivery rider or booking fee is paid by the customer directly to the rider/service. It is separate from the café’s order total.
-                </Alert>
-              </>
+              <TextField
+                label="Delivery address"
+                value={deliveryAddress}
+                onChange={(event) => setDeliveryAddress(event.target.value)}
+                required
+                autoComplete="street-address"
+                multiline
+                minRows={2}
+                slotProps={{ htmlInput: { minLength: 8, maxLength: 500 } }}
+                helperText="Enter the complete address and any useful landmark."
+              />
             )}
             <TextField
               label="Contact phone"
@@ -1021,12 +1016,8 @@ export default function CheckoutPage({ panel = false }) {
               </Stack>
               {fulfillment === 'delivery' && (
                 <>
-                  <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between' }}>
-                    <Typography>Café delivery charge</Typography>
-                    <Typography>{formatPrice(selectedBranch?.delivery_fee || 0)}</Typography>
-                  </Stack>
                   <Typography variant="caption" color="text.secondary">
-                    Rider/booking fees are paid separately by the customer and are not included above.
+                    Pay the rider/booking fee separately through the delivery booking service; it is not part of your café order total.
                   </Typography>
                 </>
               )}
@@ -1048,8 +1039,7 @@ export default function CheckoutPage({ panel = false }) {
                   {formatPrice(Math.max(
                     0,
                     subtotal -
-                      (requestBenefit ? estimatedBenefitDiscount : estimatedDiscount) +
-                      (fulfillment === 'delivery' ? Number(selectedBranch?.delivery_fee || 0) : 0),
+                      (requestBenefit ? estimatedBenefitDiscount : estimatedDiscount),
                   ))}
                 </Typography>
               </Stack>

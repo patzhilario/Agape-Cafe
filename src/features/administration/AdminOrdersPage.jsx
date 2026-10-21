@@ -380,7 +380,7 @@ export default function AdminOrdersPage() {
                       </Stack>
                     ))}
                   </Stack>
-                  {order.fulfillment_method === 'delivery' && (
+                  {order.fulfillment_method === 'delivery' && Number(order.delivery_fee) > 0 && (
                     <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
                       <Typography variant="body2" color="text.secondary">Delivery fee</Typography>
                       <Typography variant="body2">{formatPrice(order.delivery_fee)}</Typography>

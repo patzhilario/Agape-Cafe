@@ -7654,9 +7654,9 @@ notify pgrst, 'reload schema';
 
 -- Migration 31: four order types and dine-in tables
 alter table public.orders
-  add column dining_table_id uuid;
+  add column if not exists dining_table_id uuid;
 
-create table public.branch_dining_tables (
+create table if not exists public.branch_dining_tables (
   id uuid primary key default gen_random_uuid(),
   branch_id uuid not null references public.branches(id) on delete cascade,
   label text not null check (length(btrim(label)) between 1 and 40),
@@ -7664,21 +7664,34 @@ create table public.branch_dining_tables (
   created_at timestamptz not null default now()
 );
 
-create unique index branch_dining_tables_branch_label_key
+create unique index if not exists branch_dining_tables_branch_label_key
   on public.branch_dining_tables(branch_id, lower(label));
 
-alter table public.orders
-  add constraint orders_dining_table_id_fkey
-  foreign key (dining_table_id) references public.branch_dining_tables(id)
-  on delete restrict;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.orders'::regclass
+      and conname = 'orders_dining_table_id_fkey'
+  ) then
+    alter table public.orders
+      add constraint orders_dining_table_id_fkey
+      foreign key (dining_table_id) references public.branch_dining_tables(id)
+      on delete restrict;
+  end if;
+end;
+$$;
 
-create unique index orders_one_active_dine_in_order_per_table
+create unique index if not exists orders_one_active_dine_in_order_per_table
   on public.orders(dining_table_id)
   where dining_table_id is not null
     and status not in ('cancelled', 'completed');
 
 alter table public.branch_dining_tables enable row level security;
 
+drop policy if exists "Customers and staff can view available dining tables"
+  on public.branch_dining_tables;
 create policy "Customers and staff can view available dining tables"
 on public.branch_dining_tables for select to authenticated
 using (
@@ -7697,6 +7710,8 @@ using (
   )
 );
 
+drop policy if exists "Super admins can manage branch dining tables"
+  on public.branch_dining_tables;
 create policy "Super admins can manage branch dining tables"
 on public.branch_dining_tables for all to authenticated
 using (public.has_role('super_admin'))
@@ -7764,6 +7779,7 @@ declare
   current_order public.orders%rowtype;
   created_order_id uuid;
   is_replay boolean := false;
+  legacy_delivery_fee numeric(12, 2) := 0;
 begin
   if current_user_id is null or not public.is_active_account() then
     raise exception 'Sign in with an active account to place an order.'
@@ -7833,6 +7849,24 @@ begin
     uploaded_benefit_document_path,
     customer_delivery_address
   );
+
+  if not is_replay and fulfillment = 'delivery' then
+    select delivery_fee into legacy_delivery_fee
+    from public.orders
+    where id = created_order_id
+    for update;
+
+    if coalesce(legacy_delivery_fee, 0) > 0 then
+      update public.orders
+      set total = total - legacy_delivery_fee,
+          delivery_fee = 0
+      where id = created_order_id;
+
+      update public.payments
+      set amount = amount - legacy_delivery_fee
+      where order_id = created_order_id;
+    end if;
+  end if;
 
   if not is_replay and fulfillment = 'dine_in' then
     update public.orders
@@ -7992,6 +8026,7 @@ begin
 end;
 $$;
 
+drop trigger if exists orders_guard_dining_table_assignment on public.orders;
 create trigger orders_guard_dining_table_assignment
 before update of dining_table_id, branch_id, fulfillment_method on public.orders
 for each row execute function public.guard_order_dining_table_assignment();

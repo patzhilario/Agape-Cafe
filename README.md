@@ -247,8 +247,11 @@ Migration 31 adds Dine-in, Take-out, Pick-up, and Delivery checkout flows.
 Pick-up and Delivery require online QR payment; Dine-in and Take-out support
 online QR or payment at the branch. Dine-in tables are configured per branch
 and held by an active order until staff completes or cancels it. PWD/Senior
-discount requests are restricted to Dine-in and Take-out. Apply it after
-migration 30 on existing projects.
+discount requests are restricted to Dine-in and Take-out. The delivery
+rider/booking fee is paid by the customer directly through the booking service
+and is excluded from the café order total. Apply it after migration 30 on
+existing projects. This migration is safe to re-run if some objects were
+already created by a previous incomplete attempt.
 
 The foundation migration also creates customer profiles and roles for any
 Supabase Auth users that already exist when the schema is installed. If the
