@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Container,
   Dialog,
@@ -15,6 +16,12 @@ import {
   Paper,
   Select,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -51,11 +58,13 @@ export default function AdminBenefitRequestsPage() {
   const [reviewNotes, setReviewNotes] = useState({})
   const [documentUrls, setDocumentUrls] = useState({})
   const [documentPreview, setDocumentPreview] = useState(null)
+  const [selectedRequestId, setSelectedRequestId] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [busyRequestId, setBusyRequestId] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const selectedRequest = requests.find((request) => request.id === selectedRequestId)
 
   useEffect(() => {
     let active = true
@@ -182,77 +191,148 @@ export default function AdminBenefitRequestsPage() {
           <Stack sx={{ alignItems: 'center', py: 8 }}><CircularProgress /></Stack>
         ) : !requests.length && page === 0 ? (
           <Alert severity="info">No benefit discount requests are visible for this branch.</Alert>
-        ) : requests.map((request) => (
-          <Paper key={request.id} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-            <Stack spacing={2}>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
-                <Box>
-                  <Typography variant="h6">{request.order?.order_number} · {label(request.benefit_type)}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {request.order?.customer_name} · {request.branch?.name} · {new Date(request.created_at).toLocaleString()}
-                  </Typography>
-                </Box>
-                <Typography fontWeight={700}>
-                  {label(request.status)}
-                  {request.status === 'approved' ? ` · ${formatPrice(request.discount_total)}` : ''}
-                </Typography>
-              </Stack>
-              <Stack spacing={1}>
-                {request.items.map((item) => (
-                  <Typography key={item.order_item_id} variant="body2">
-                    {item.eligible_quantity} × {item.order_item?.product_name}
-                    {item.order_item?.variant_name ? ` · ${item.order_item.variant_name}` : ''}
-                    {item.discount_amount > 0 ? ` · ${formatPrice(item.discount_amount)} discount` : ''}
-                  </Typography>
+        ) : (
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small" aria-label="Benefit discount requests" sx={{ minWidth: 850 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Order</TableCell>
+                  <TableCell>Benefit</TableCell>
+                  <TableCell>Customer</TableCell>
+                  <TableCell>Branch</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Details</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {requests.map((request) => (
+                  <TableRow key={request.id} hover>
+                    <TableCell sx={{ fontWeight: 700 }}>{request.order?.order_number || '—'}</TableCell>
+                    <TableCell>{label(request.benefit_type)}</TableCell>
+                    <TableCell>{request.order?.customer_name || '—'}</TableCell>
+                    <TableCell>{request.branch?.name || '—'}</TableCell>
+                    <TableCell>{new Date(request.created_at).toLocaleString()}</TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        color={request.status === 'approved' ? 'success' : request.status === 'rejected' ? 'error' : 'warning'}
+                        label={label(request.status)}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button size="small" variant="outlined" onClick={() => setSelectedRequestId(request.id)}>View</Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </Stack>
-              <Typography variant="body2">
-                Order total: {formatPrice(request.order?.total || 0)} · Payment {label(request.order?.payment_status || 'unpaid')}
-              </Typography>
-              {request.review_note && <Alert severity={request.status === 'rejected' ? 'warning' : 'info'}>{request.review_note}</Alert>}
-              {request.document_path ? (
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                  {documentUrls[request.id] ? (
-                    <Button onClick={() => setDocumentPreview({
-                      title: `${label(request.benefit_type)} ID · ${request.order?.order_number || 'Benefit request'}`,
-                      url: documentUrls[request.id],
-                      type: getDocumentType(request.document_path),
-                    })}>
-                      View ID evidence
-                    </Button>
-                  ) : (
-                    <Button onClick={() => openDocument(request)}>View ID evidence (60-second link)</Button>
-                  )}
-                  {canApprove && (
-                    <Button color="error" onClick={() => deleteDocument(request)} disabled={busyRequestId === request.id}>
-                      Delete ID document
-                    </Button>
-                  )}
-                </Stack>
-              ) : <Alert severity="warning">No ID document is attached to this request.</Alert>}
-              {canApprove && request.status === 'pending' && (
-                <Stack spacing={1}>
-                  <TextField
-                    label="Review note (required to reject)"
-                    value={reviewNotes[request.id] || ''}
-                    onChange={(event) => setReviewNotes((current) => ({ ...current, [request.id]: event.target.value }))}
-                    multiline
-                    minRows={2}
-                    slotProps={{ htmlInput: { maxLength: 500 } }}
-                  />
-                  <Stack direction="row" spacing={1}>
-                    <Button variant="contained" disabled={busyRequestId === request.id || !request.document_path || !documentUrls[request.id]} onClick={() => reviewRequest(request, 'approved')}>
-                      Approve and apply discount
-                    </Button>
-                    <Button color="error" disabled={busyRequestId === request.id} onClick={() => reviewRequest(request, 'rejected')}>
-                      Reject request
-                    </Button>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+        <Dialog
+          open={Boolean(selectedRequest)}
+          onClose={() => setSelectedRequestId('')}
+          fullWidth
+          maxWidth="md"
+          aria-labelledby="benefit-request-details-title"
+        >
+          {selectedRequest && (
+            <>
+              <DialogTitle id="benefit-request-details-title">
+                {selectedRequest.order?.order_number} · {label(selectedRequest.benefit_type)}
+              </DialogTitle>
+              <DialogContent dividers>
+                <Stack spacing={2.5}>
+                  <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
+                    <Stack spacing={1}>
+                      <Typography fontWeight={700}>{selectedRequest.order?.customer_name} · {selectedRequest.branch?.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Submitted {new Date(selectedRequest.created_at).toLocaleString()}
+                      </Typography>
+                      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+                        <Chip
+                          size="small"
+                          color={selectedRequest.status === 'approved' ? 'success' : selectedRequest.status === 'rejected' ? 'error' : 'warning'}
+                          label={label(selectedRequest.status)}
+                        />
+                        <Typography variant="body2">
+                          Order {formatPrice(selectedRequest.order?.total || 0)} · Payment {label(selectedRequest.order?.payment_status || 'unpaid')}
+                        </Typography>
+                        {selectedRequest.status === 'approved' && (
+                          <Typography variant="body2" fontWeight={700} color="success.main">
+                            Discount {formatPrice(selectedRequest.discount_total)}
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Stack>
+                  </Paper>
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>ELIGIBLE ORDER ITEMS</Typography>
+                    <Stack spacing={1}>
+                    {selectedRequest.items.map((item) => (
+                      <Paper key={item.order_item_id} variant="outlined" sx={{ p: 1.5 }}>
+                      <Typography variant="body2">
+                        {item.eligible_quantity} × {item.order_item?.product_name}
+                        {item.order_item?.variant_name ? ` · ${item.order_item.variant_name}` : ''}
+                        {item.discount_amount > 0 ? ` · ${formatPrice(item.discount_amount)} discount` : ''}
+                      </Typography>
+                      </Paper>
+                    ))}
                   </Stack>
+                  </Box>
+                  {selectedRequest.review_note && (
+                    <Alert severity={selectedRequest.status === 'rejected' ? 'warning' : 'info'}>
+                      {selectedRequest.review_note}
+                    </Alert>
+                  )}
+                  {selectedRequest.document_path ? (
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                      {documentUrls[selectedRequest.id] ? (
+                        <Button onClick={() => setDocumentPreview({
+                          title: `${label(selectedRequest.benefit_type)} ID · ${selectedRequest.order?.order_number || 'Benefit request'}`,
+                          url: documentUrls[selectedRequest.id],
+                          type: getDocumentType(selectedRequest.document_path),
+                        })}>
+                          View ID evidence
+                        </Button>
+                      ) : (
+                        <Button onClick={() => openDocument(selectedRequest)}>View ID evidence (60-second link)</Button>
+                      )}
+                      {canApprove && (
+                        <Button color="error" onClick={() => deleteDocument(selectedRequest)} disabled={busyRequestId === selectedRequest.id}>
+                          Delete ID document
+                        </Button>
+                      )}
+                    </Stack>
+                  ) : <Alert severity="warning">No ID document is attached to this request.</Alert>}
+                  {canApprove && selectedRequest.status === 'pending' && (
+                    <Stack spacing={1}>
+                      <TextField
+                        label="Review note (required to reject)"
+                        value={reviewNotes[selectedRequest.id] || ''}
+                        onChange={(event) => setReviewNotes((current) => ({ ...current, [selectedRequest.id]: event.target.value }))}
+                        multiline
+                        minRows={2}
+                        slotProps={{ htmlInput: { maxLength: 500 } }}
+                      />
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                        <Button variant="contained" disabled={busyRequestId === selectedRequest.id || !selectedRequest.document_path || !documentUrls[selectedRequest.id]} onClick={() => reviewRequest(selectedRequest, 'approved')}>
+                          Approve and apply discount
+                        </Button>
+                        <Button color="error" disabled={busyRequestId === selectedRequest.id} onClick={() => reviewRequest(selectedRequest, 'rejected')}>
+                          Reject request
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  )}
                 </Stack>
-              )}
-            </Stack>
-          </Paper>
-        ))}
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setSelectedRequestId('')}>Close</Button>
+              </DialogActions>
+            </>
+          )}
+        </Dialog>
         {!isLoading && !errorMessage && (requests.length > 0 || page > 0) && (
           <PaginationControls
             page={page}

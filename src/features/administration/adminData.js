@@ -16,7 +16,7 @@ export async function getAdminBranches(account) {
   return data.filter((branch) => assignedIds.has(branch.id))
 }
 
-export async function getOrders(branchId, page = 0, pageSize = 50) {
+export async function getOrders(branchId, page = 0, pageSize = 50, filters = {}) {
   let query = getSupabaseClient()
     .from('orders')
     .select(`
@@ -45,6 +45,11 @@ export async function getOrders(branchId, page = 0, pageSize = 50) {
     .order('id', { ascending: false })
     .range(page * pageSize, (page + 1) * pageSize - 1)
   if (branchId) query = query.eq('branch_id', branchId)
+  if (filters.status) query = query.eq('status', filters.status)
+  if (filters.paymentStatus) query = query.eq('payment_status', filters.paymentStatus)
+  if (filters.fulfillmentMethod) query = query.eq('fulfillment_method', filters.fulfillmentMethod)
+  if (filters.dateFrom) query = query.gte('created_at', `${filters.dateFrom}T00:00:00`)
+  if (filters.dateTo) query = query.lte('created_at', `${filters.dateTo}T23:59:59.999`)
   const { data, error } = await query
   if (error) throw new Error(`Could not load orders: ${error.message}`)
   return data.map((order) => ({

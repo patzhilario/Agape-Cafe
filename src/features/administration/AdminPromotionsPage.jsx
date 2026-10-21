@@ -5,6 +5,10 @@ import {
   Button,
   CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   InputLabel,
@@ -13,6 +17,12 @@ import {
   Select,
   Stack,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -49,6 +59,7 @@ function AdminPromotionsPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const [promotionDialogOpen, setPromotionDialogOpen] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -131,6 +142,7 @@ function AdminPromotionsPage() {
         maxUsesPerCustomer: '',
       })
       setTargets([])
+      setPromotionDialogOpen(false)
       setSuccessMessage('Promotion created inactive. Review its details, then activate it when ready.')
       setReloadKey((value) => value + 1)
     } catch (error) {
@@ -180,88 +192,149 @@ function AdminPromotionsPage() {
         </Box>
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         {successMessage && <Alert severity="success">{successMessage}</Alert>}
-        <Paper component="form" onSubmit={createPromotion} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-          <Stack spacing={2}>
-            <Typography variant="h6">Create promotion</Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField label="Name" value={form.name} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} required slotProps={{ htmlInput: { maxLength: 120 } }} />
-              <FormControl fullWidth>
-                <InputLabel id="discount-type-label">Discount type</InputLabel>
-                <Select labelId="discount-type-label" label="Discount type" value={form.discountType} onChange={(event) => setForm((value) => ({ ...value, discountType: event.target.value }))}>
-                  <MenuItem value="percentage">Percentage</MenuItem>
-                  <MenuItem value="fixed">Fixed amount</MenuItem>
-                </Select>
-              </FormControl>
-              <TextField label={form.discountType === 'percentage' ? 'Percent off' : 'Amount off (PHP)'} type="number" value={form.discountValue} onChange={(event) => setForm((value) => ({ ...value, discountValue: event.target.value }))} required slotProps={{ htmlInput: { min: '0.01', step: '0.01', max: form.discountType === 'percentage' ? 100 : undefined } }} />
-              <TextField label="Minimum purchase (PHP)" type="number" value={form.minimumPurchase} onChange={(event) => setForm((value) => ({ ...value, minimumPurchase: event.target.value }))} slotProps={{ htmlInput: { min: '0', step: '0.01' } }} />
-            </Stack>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField label="Maximum discount (optional, PHP)" type="number" value={form.maxDiscount} onChange={(event) => setForm((value) => ({ ...value, maxDiscount: event.target.value }))} slotProps={{ htmlInput: { min: '0.01', step: '0.01' } }} />
-              <TextField label="Total redemptions limit (optional)" type="number" value={form.maxUses} onChange={(event) => setForm((value) => ({ ...value, maxUses: event.target.value }))} slotProps={{ htmlInput: { min: '1', step: '1' } }} />
-              <TextField label="Per-customer limit (optional)" type="number" value={form.maxUsesPerCustomer} onChange={(event) => setForm((value) => ({ ...value, maxUsesPerCustomer: event.target.value }))} slotProps={{ htmlInput: { min: '1', step: '1' } }} />
-            </Stack>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField label="Starts at" type="datetime-local" value={form.startsAt} onChange={(event) => setForm((value) => ({ ...value, startsAt: event.target.value }))} required InputLabelProps={{ shrink: true }} />
-              <TextField label="Ends at (optional)" type="datetime-local" value={form.endsAt} onChange={(event) => setForm((value) => ({ ...value, endsAt: event.target.value }))} InputLabelProps={{ shrink: true }} />
-            </Stack>
-            <TextField label="Description" value={form.description} onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))} multiline minRows={2} slotProps={{ htmlInput: { maxLength: 1000 } }} />
-            <TextField label="Terms and conditions" value={form.terms} onChange={(event) => setForm((value) => ({ ...value, terms: event.target.value }))} multiline minRows={2} slotProps={{ htmlInput: { maxLength: 2000 } }} />
-            <FormControl fullWidth>
-              <InputLabel id="promotion-products-label">Target products (optional)</InputLabel>
-              <Select
-                multiple
-                labelId="promotion-products-label"
-                label="Target products (optional)"
-                value={targets}
-                onChange={(event) => setTargets(event.target.value)}
-                renderValue={(selected) => selected.map((id) => products.find((product) => product.id === id)?.name || id).join(', ')}
-              >
-                {products.map((product) => <MenuItem key={product.id} value={product.id}>{product.name} · {product.sku}</MenuItem>)}
-              </Select>
-            </FormControl>
-            <Typography variant="body2" color="text.secondary">
-              No product targets means the promotion applies to all eligible products.
-            </Typography>
-            <Button type="submit" variant="contained" disabled={isSaving}>Create inactive promotion</Button>
-          </Stack>
-        </Paper>
-        <Stack spacing={2}>
-          <Typography variant="h5">Existing promotions</Typography>
-          {promotions.length ? promotions.map((promotion) => (
-            <Paper key={promotion.id} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
-              <Stack spacing={1.5}>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
-                  <Box>
-                    <Typography variant="h6">{promotion.name}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {promotion.discount_type === 'percentage'
-                        ? `${promotion.discount_value}% off`
-                        : `${formatPrice(promotion.discount_value)} off`}
-                      {' · Starts '}{new Date(promotion.starts_at).toLocaleString()}
-                      {promotion.ends_at ? ` · Ends ${new Date(promotion.ends_at).toLocaleString()}` : ' · No end date'}
-                    </Typography>
+        <Button variant="contained" sx={{ alignSelf: 'flex-start' }} onClick={() => setPromotionDialogOpen(true)}>
+          Add promotion
+        </Button>
+        <Dialog
+          open={promotionDialogOpen}
+          onClose={() => !isSaving && setPromotionDialogOpen(false)}
+          fullWidth
+          maxWidth="md"
+        >
+          <Box component="form" onSubmit={createPromotion}>
+            <DialogTitle>Create promotion</DialogTitle>
+            <DialogContent dividers sx={{ px: { xs: 2, sm: 3 }, py: 2.5 }}>
+              <Stack spacing={3}>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>PROMOTION DETAILS</Typography>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 2 }}>
+                    <TextField label="Name" value={form.name} onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))} required slotProps={{ htmlInput: { maxLength: 120 } }} />
+                    <FormControl>
+                      <InputLabel id="discount-type-label">Discount type</InputLabel>
+                      <Select labelId="discount-type-label" label="Discount type" value={form.discountType} onChange={(event) => setForm((value) => ({ ...value, discountType: event.target.value }))}>
+                        <MenuItem value="percentage">Percentage</MenuItem>
+                        <MenuItem value="fixed">Fixed amount</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <TextField label={form.discountType === 'percentage' ? 'Percent off' : 'Amount off (PHP)'} type="number" value={form.discountValue} onChange={(event) => setForm((value) => ({ ...value, discountValue: event.target.value }))} required slotProps={{ htmlInput: { min: '0.01', step: '0.01', max: form.discountType === 'percentage' ? 100 : undefined } }} />
+                    <TextField label="Minimum purchase (PHP)" type="number" value={form.minimumPurchase} onChange={(event) => setForm((value) => ({ ...value, minimumPurchase: event.target.value }))} slotProps={{ htmlInput: { min: '0', step: '0.01' } }} />
+                    <TextField label="Maximum discount (optional, PHP)" type="number" value={form.maxDiscount} onChange={(event) => setForm((value) => ({ ...value, maxDiscount: event.target.value }))} slotProps={{ htmlInput: { min: '0.01', step: '0.01' } }} />
                   </Box>
-                  <FormControlLabel
-                    control={<Switch checked={promotion.is_active} disabled={isSaving} onChange={(event) => setPromotionActive(promotion, event.target.checked)} />}
-                    label={promotion.is_active ? 'Active' : 'Inactive'}
-                  />
-                </Stack>
-                <Typography variant="body2">
-                  Minimum {formatPrice(promotion.minimum_purchase)}
-                  {promotion.max_discount ? ` · Maximum discount ${formatPrice(promotion.max_discount)}` : ''}
-                  {promotion.max_uses ? ` · Uses ${promotion.max_uses}` : ''}
-                  {promotion.max_uses_per_customer ? ` · Per customer ${promotion.max_uses_per_customer}` : ''}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Target products: {promotion.promotion_products?.length
-                    ? promotion.promotion_products.map((target) => products.find((product) => product.id === target.product_id)?.name || 'Archived product').join(', ')
-                    : 'All products'}
-                </Typography>
-                {promotion.terms && <Typography variant="body2">{promotion.terms}</Typography>}
+                </Box>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>SCHEDULE AND USAGE LIMITS</Typography>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 2 }}>
+                    <TextField
+                      label="Starts at"
+                      type="datetime-local"
+                      value={form.startsAt}
+                      onChange={(event) => setForm((value) => ({ ...value, startsAt: event.target.value }))}
+                      required
+                      fullWidth
+                      slotProps={{
+                        inputLabel: { shrink: true },
+                        htmlInput: { style: { minWidth: 0, colorScheme: 'light' } },
+                      }}
+                      helperText="Philippine local time"
+                    />
+                    <TextField
+                      label="Ends at (optional)"
+                      type="datetime-local"
+                      value={form.endsAt}
+                      onChange={(event) => setForm((value) => ({ ...value, endsAt: event.target.value }))}
+                      fullWidth
+                      slotProps={{
+                        inputLabel: { shrink: true },
+                        htmlInput: { style: { minWidth: 0, colorScheme: 'light' } },
+                      }}
+                      helperText="Leave blank for no end date"
+                    />
+                    <TextField label="Total redemptions limit (optional)" type="number" value={form.maxUses} onChange={(event) => setForm((value) => ({ ...value, maxUses: event.target.value }))} slotProps={{ htmlInput: { min: '1', step: '1' } }} />
+                    <TextField label="Per-customer limit (optional)" type="number" value={form.maxUsesPerCustomer} onChange={(event) => setForm((value) => ({ ...value, maxUsesPerCustomer: event.target.value }))} slotProps={{ htmlInput: { min: '1', step: '1' } }} />
+                  </Box>
+                </Box>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>DESCRIPTION AND TARGETING</Typography>
+                  <Stack spacing={2}>
+                    <TextField label="Description" value={form.description} onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))} multiline minRows={2} slotProps={{ htmlInput: { maxLength: 1000 } }} />
+                    <TextField label="Terms and conditions" value={form.terms} onChange={(event) => setForm((value) => ({ ...value, terms: event.target.value }))} multiline minRows={2} slotProps={{ htmlInput: { maxLength: 2000 } }} />
+                    <FormControl>
+                      <InputLabel id="promotion-products-label">Target products (optional)</InputLabel>
+                      <Select
+                        multiple
+                        labelId="promotion-products-label"
+                        label="Target products (optional)"
+                        value={targets}
+                        onChange={(event) => setTargets(event.target.value)}
+                        renderValue={(selected) => selected.map((id) => products.find((product) => product.id === id)?.name || id).join(', ')}
+                      >
+                        {products.map((product) => <MenuItem key={product.id} value={product.id}>{product.name} · {product.sku}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                    <Typography variant="body2" color="text.secondary">
+                      No product targets means the promotion applies to all eligible products.
+                    </Typography>
+                  </Stack>
+                </Box>
               </Stack>
-            </Paper>
-          )) : <Alert severity="info">No promotions have been configured.</Alert>}
-        </Stack>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, py: 2 }}>
+              <Button onClick={() => setPromotionDialogOpen(false)} disabled={isSaving}>Cancel</Button>
+              <Button type="submit" variant="contained" disabled={isSaving}>Create inactive promotion</Button>
+            </DialogActions>
+          </Box>
+        </Dialog>
+        <Box>
+          <Typography variant="h5">Existing promotions</Typography>
+          {promotions.length ? (
+            <TableContainer component={Paper} variant="outlined" sx={{ mt: 1.5 }}>
+              <Table size="small" aria-label="Promotions" sx={{ minWidth: 900 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Promotion</TableCell>
+                    <TableCell>Discount</TableCell>
+                    <TableCell>Schedule</TableCell>
+                    <TableCell>Minimum</TableCell>
+                    <TableCell>Products</TableCell>
+                    <TableCell>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {promotions.map((promotion) => (
+                    <TableRow key={promotion.id} hover>
+                      <TableCell>
+                        <Typography fontWeight={700}>{promotion.name}</Typography>
+                        {promotion.description && <Typography variant="caption" color="text.secondary">{promotion.description}</Typography>}
+                      </TableCell>
+                      <TableCell>
+                        {promotion.discount_type === 'percentage'
+                          ? `${promotion.discount_value}%`
+                          : formatPrice(promotion.discount_value)}
+                        {promotion.max_discount ? ` · max ${formatPrice(promotion.max_discount)}` : ''}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(promotion.starts_at).toLocaleDateString()}
+                        {promotion.ends_at ? ` – ${new Date(promotion.ends_at).toLocaleDateString()}` : ' – No end'}
+                      </TableCell>
+                      <TableCell>{formatPrice(promotion.minimum_purchase)}</TableCell>
+                      <TableCell>
+                        {promotion.promotion_products?.length
+                          ? promotion.promotion_products.map((target) => products.find((product) => product.id === target.product_id)?.name || 'Archived product').join(', ')
+                          : 'All products'}
+                      </TableCell>
+                      <TableCell>
+                        <FormControlLabel
+                          control={<Switch size="small" checked={promotion.is_active} disabled={isSaving} onChange={(event) => setPromotionActive(promotion, event.target.checked)} />}
+                          label={promotion.is_active ? 'Active' : 'Inactive'}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : <Alert severity="info" sx={{ mt: 1.5 }}>No promotions have been configured.</Alert>}
+        </Box>
       </Stack>
     </Container>
   )

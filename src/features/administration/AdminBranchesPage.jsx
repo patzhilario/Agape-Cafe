@@ -17,6 +17,12 @@ import {
   Select,
   Stack,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -60,6 +66,8 @@ export default function AdminBranchesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [diningTableDialogOpen, setDiningTableDialogOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -96,6 +104,7 @@ export default function AdminBranchesPage() {
     setIsLoadingPaymentMethods(false)
     setPaymentDraft(emptyPaymentMethod)
     setPaymentQrFile(null)
+    setPaymentDialogOpen(false)
     setErrorMessage('')
     setDialogOpen(true)
   }
@@ -105,6 +114,7 @@ export default function AdminBranchesPage() {
     setBranchDiningTables([])
     setBranchDiningTableOrders([])
     setDiningTableDraft({ id: '', label: '' })
+    setDiningTableDialogOpen(false)
     setPaymentDraft(emptyPaymentMethod)
     setPaymentQrFile(null)
     setErrorMessage('')
@@ -270,6 +280,7 @@ export default function AdminBranchesPage() {
       }
       setPaymentDraft(emptyPaymentMethod)
       setPaymentQrFile(null)
+      setPaymentDialogOpen(false)
       const { data, error } = await supabase
         .from('payment_methods')
         .select('id, code, name, instructions, settlement_type, is_active, qr_code_path')
@@ -335,6 +346,7 @@ export default function AdminBranchesPage() {
         .order('label')
       if (error) throw new Error(error.message)
       setBranchDiningTables(data)
+      setDiningTableDialogOpen(false)
     } catch (error) {
       console.error('Unable to save branch dining table.', error)
       setErrorMessage(error.message)
@@ -393,31 +405,39 @@ export default function AdminBranchesPage() {
         {isLoading ? (
           <Stack sx={{ alignItems: 'center', py: 8 }}><CircularProgress /></Stack>
         ) : branches.length ? (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 2 }}>
-            {branches.map((branch) => (
-              <Paper key={branch.id} variant="outlined" sx={{ p: 2.5 }}>
-                <Stack spacing={1.5}>
-                  <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Box>
-                      <Typography variant="h6">{branch.name}</Typography>
-                      <Typography color="text.secondary">{branch.address || 'No address added'}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Delivery: {branch.delivery_enabled ? 'Available · booking fee paid by customer' : 'Off'}
-                      </Typography>
-                    </Box>
-                    <Button size="small" startIcon={<EditIcon />} onClick={() => openEditBranch(branch)}>Edit</Button>
-                  </Stack>
-                  <Typography variant="body2" color="text.secondary">
-                    {[branch.phone, branch.email].filter(Boolean).join(' · ') || 'No contact details'}
-                  </Typography>
-                  <FormControlLabel
-                    control={<Switch checked={branch.is_active} onChange={(event) => toggleBranch(branch, event.target.checked)} />}
-                    label={branch.is_active ? 'Open for orders' : 'Inactive'}
-                  />
-                </Stack>
-              </Paper>
-            ))}
-          </Box>
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small" aria-label="Branches" sx={{ minWidth: 850 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Branch</TableCell>
+                  <TableCell>Address</TableCell>
+                  <TableCell>Contact</TableCell>
+                  <TableCell>Delivery</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {branches.map((branch) => (
+                  <TableRow key={branch.id} hover>
+                    <TableCell sx={{ fontWeight: 700 }}>{branch.name}</TableCell>
+                    <TableCell>{branch.address || '—'}</TableCell>
+                    <TableCell>{[branch.phone, branch.email].filter(Boolean).join(' · ') || '—'}</TableCell>
+                    <TableCell>{branch.delivery_enabled ? 'Available' : 'Off'}</TableCell>
+                    <TableCell>
+                      <FormControlLabel
+                        control={<Switch size="small" checked={branch.is_active} onChange={(event) => toggleBranch(branch, event.target.checked)} />}
+                        label={branch.is_active ? 'Open' : 'Inactive'}
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button size="small" startIcon={<EditIcon />} onClick={() => openEditBranch(branch)}>Edit</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         ) : (
           <Alert severity="info">No branches have been created. Add the first branch to configure locations and staff access.</Alert>
         )}
@@ -464,60 +484,76 @@ export default function AdminBranchesPage() {
                   {isLoadingPaymentMethods ? (
                     <CircularProgress size={24} />
                   ) : (
-                    <Stack spacing={1}>
-                      {branchPaymentMethods.map((method) => (
-                        <Paper key={method.id} variant="outlined" sx={{ p: 1.5 }}>
-                          <Stack
-                            direction={{ xs: 'column', sm: 'row' }}
-                            spacing={1.5}
-                            sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
-                          >
-                            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-                              {method.qr_code_path && (
-                                <Box
-                                  component="img"
-                                  src={getSupabaseClient().storage.from('branch-payment-qr').getPublicUrl(method.qr_code_path).data.publicUrl}
-                                  alt={`${method.name} QR`}
-                                  sx={{ width: 56, height: 56, objectFit: 'contain' }}
-                                />
-                              )}
-                              <Box>
-                                <Typography fontWeight={700}>{method.name}</Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  {method.settlement_type === 'provider' ? 'Online QR' : 'Pay at branch'}
-                                  {' · '}{method.is_active ? 'Enabled' : 'Disabled'}
-                                </Typography>
-                              </Box>
-                            </Stack>
-                            <Stack direction="row" spacing={1}>
-                              <Button
-                                type="button"
-                                size="small"
-                                onClick={() => {
-                                  setPaymentDraft({ ...method })
-                                  setPaymentQrFile(null)
-                                  setErrorMessage('')
-                                }}
-                              >
-                                Edit
-                              </Button>
-                              {method.is_active && (
-                                <Button
-                                  type="button"
-                                  size="small"
-                                  color="error"
-                                  onClick={() => void deactivatePaymentMethod(method)}
-                                >
-                                  Deactivate
-                                </Button>
-                              )}
-                            </Stack>
-                          </Stack>
-                        </Paper>
-                      ))}
-                      {!branchPaymentMethods.length && (
+                    <Stack spacing={1.5}>
+                      {branchPaymentMethods.length ? (
+                        <TableContainer component={Paper} variant="outlined">
+                          <Table size="small" aria-label="Branch payment methods" sx={{ minWidth: 600 }}>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Method</TableCell>
+                                <TableCell>Type</TableCell>
+                                <TableCell>Status</TableCell>
+                                <TableCell align="right">Actions</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {branchPaymentMethods.map((method) => (
+                                <TableRow key={method.id} hover>
+                                  <TableCell>
+                                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                                      {method.qr_code_path && (
+                                        <Box
+                                          component="img"
+                                          src={getSupabaseClient().storage.from('branch-payment-qr').getPublicUrl(method.qr_code_path).data.publicUrl}
+                                          alt={`${method.name} QR`}
+                                          sx={{ width: 36, height: 36, objectFit: 'contain' }}
+                                        />
+                                      )}
+                                      <Typography fontWeight={700}>{method.name}</Typography>
+                                    </Stack>
+                                  </TableCell>
+                                  <TableCell>{method.settlement_type === 'provider' ? 'Online QR' : 'Pay at branch'}</TableCell>
+                                  <TableCell>{method.is_active ? 'Enabled' : 'Disabled'}</TableCell>
+                                  <TableCell align="right">
+                                    <Button
+                                      type="button"
+                                      size="small"
+                                      onClick={() => {
+                                        setPaymentDraft({ ...method })
+                                        setPaymentQrFile(null)
+                                        setErrorMessage('')
+                                        setPaymentDialogOpen(true)
+                                      }}
+                                    >
+                                      Edit
+                                    </Button>
+                                    {method.is_active && (
+                                      <Button type="button" size="small" color="error" onClick={() => void deactivatePaymentMethod(method)}>
+                                        Deactivate
+                                      </Button>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      ) : (
                         <Alert severity="info">No payment methods are configured for this branch yet.</Alert>
                       )}
+                      <Button
+                        type="button"
+                        variant="outlined"
+                        sx={{ alignSelf: 'flex-start' }}
+                        onClick={() => {
+                          setPaymentDraft(emptyPaymentMethod)
+                          setPaymentQrFile(null)
+                          setErrorMessage('')
+                          setPaymentDialogOpen(true)
+                        }}
+                      >
+                        Add payment method
+                      </Button>
                     </Stack>
                   )}
                   <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
@@ -528,175 +564,69 @@ export default function AdminBranchesPage() {
                           Add table names or numbers for this branch. An active dine-in order holds its table until staff completes or voids the order.
                         </Typography>
                       </Box>
-                      {branchDiningTables.map((table) => {
-                        const activeOrder = branchDiningTableOrders.find(
-                          (order) => order.dining_table_id === table.id,
-                        )
-                        return (
-                          <Paper key={table.id} variant="outlined" sx={{ p: 1.25 }}>
-                            <Stack
-                              direction={{ xs: 'column', sm: 'row' }}
-                              spacing={1}
-                              sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
-                            >
-                              <Typography fontWeight={700}>
-                                {table.label} · {activeOrder ? `Occupied · ${activeOrder.order_number}` : 'Available'}
-                                {!table.is_active && ' · Disabled'}
-                              </Typography>
-                              <Stack direction="row" spacing={1}>
-                                <Button
-                                  type="button"
-                                  size="small"
-                                  onClick={() => setDiningTableDraft({ id: table.id, label: table.label })}
-                                >
-                                  Edit
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="small"
-                                  color={table.is_active ? 'error' : 'primary'}
-                                  onClick={() => void setDiningTableActive(table, !table.is_active)}
-                                >
-                                  {table.is_active ? 'Disable' : 'Enable'}
-                                </Button>
-                              </Stack>
-                            </Stack>
-                          </Paper>
-                        )
-                      })}
-                      {!branchDiningTables.length && (
+                      {branchDiningTables.length ? (
+                        <TableContainer component={Paper} variant="outlined">
+                          <Table size="small" aria-label="Branch dining tables" sx={{ minWidth: 540 }}>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Table</TableCell>
+                                <TableCell>Occupancy</TableCell>
+                                <TableCell>Status</TableCell>
+                                <TableCell align="right">Actions</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {branchDiningTables.map((table) => {
+                                const activeOrder = branchDiningTableOrders.find(
+                                  (order) => order.dining_table_id === table.id,
+                                )
+                                return (
+                                  <TableRow key={table.id} hover>
+                                    <TableCell sx={{ fontWeight: 700 }}>{table.label}</TableCell>
+                                    <TableCell>{activeOrder ? `Occupied · ${activeOrder.order_number}` : 'Available'}</TableCell>
+                                    <TableCell>{table.is_active ? 'Enabled' : 'Disabled'}</TableCell>
+                                    <TableCell align="right">
+                                      <Button
+                                        type="button"
+                                        size="small"
+                                        onClick={() => {
+                                          setDiningTableDraft({ id: table.id, label: table.label })
+                                          setDiningTableDialogOpen(true)
+                                        }}
+                                      >
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="small"
+                                        color={table.is_active ? 'error' : 'primary'}
+                                        onClick={() => void setDiningTableActive(table, !table.is_active)}
+                                      >
+                                        {table.is_active ? 'Disable' : 'Enable'}
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      ) : (
                         <Alert severity="info">No dine-in tables are configured for this branch.</Alert>
                       )}
-                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                        <TextField
-                          fullWidth
-                          label={diningTableDraft.id ? 'Edit table name or number' : 'New table name or number'}
-                          value={diningTableDraft.label}
-                          onChange={(event) => setDiningTableDraft((current) => ({
-                            ...current,
-                            label: event.target.value,
-                          }))}
-                          slotProps={{ htmlInput: { maxLength: 40 } }}
-                        />
-                        <Button
-                          type="button"
-                          variant="contained"
-                          onClick={() => void saveDiningTable()}
-                          disabled={isSavingDiningTable}
-                          sx={{ whiteSpace: 'nowrap' }}
-                        >
-                          {diningTableDraft.id ? 'Save table' : 'Add table'}
-                        </Button>
-                        {diningTableDraft.id && (
-                          <Button
-                            type="button"
-                            onClick={() => setDiningTableDraft({ id: '', label: '' })}
-                          >
-                            Cancel
-                          </Button>
-                        )}
-                      </Stack>
-                    </Stack>
-                  </Box>
-                  <Typography variant="subtitle1" fontWeight={700}>
-                    {paymentDraft.id ? `Edit ${paymentDraft.name}` : 'Add payment method'}
-                  </Typography>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                    <TextField
-                      fullWidth
-                      label="Payment method name"
-                      value={paymentDraft.name}
-                      onChange={(event) => setPaymentDraft((current) => ({ ...current, name: event.target.value }))}
-                      placeholder="e.g. GCash, Cash, MariBank, BDO"
-                      slotProps={{ htmlInput: { maxLength: 80 } }}
-                    />
-                    <FormControl fullWidth>
-                      <InputLabel id="payment-settlement-label">Payment type</InputLabel>
-                      <Select
-                        labelId="payment-settlement-label"
-                        label="Payment type"
-                        value={paymentDraft.settlement_type}
-                        onChange={(event) => setPaymentDraft((current) => ({
-                          ...current,
-                          settlement_type: event.target.value,
-                        }))}
-                      >
-                        <MenuItem value="pay_at_branch">Cash / pay at branch</MenuItem>
-                        <MenuItem value="provider">Online QR payment</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Stack>
-                  <TextField
-                    label="Customer instructions (optional)"
-                    value={paymentDraft.instructions}
-                    onChange={(event) => setPaymentDraft((current) => ({
-                      ...current,
-                      instructions: event.target.value,
-                    }))}
-                    multiline
-                    minRows={2}
-                    slotProps={{ htmlInput: { maxLength: 500 } }}
-                  />
-                  {paymentDraft.settlement_type === 'provider' && (
-                    <>
                       <Button
                         type="button"
-                        component="label"
                         variant="outlined"
-                        sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', alignSelf: 'flex-start' }}
-                      >
-                        {paymentQrFile?.name || (
-                          paymentDraft.qr_code_path ? 'Replace QR code' : 'Upload QR code'
-                        )}
-                        <input
-                          hidden
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          onChange={(event) => {
-                            setPaymentQrFile(event.target.files?.[0] || null)
-                            event.target.value = ''
-                          }}
-                        />
-                      </Button>
-                      <Typography variant="caption" color="text.secondary">
-                        JPG, PNG, or WebP · up to 5 MB. Customers upload a payment receipt and reference; branch staff verify before marking it paid.
-                      </Typography>
-                    </>
-                  )}
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={paymentDraft.is_active}
-                        onChange={(event) => setPaymentDraft((current) => ({
-                          ...current,
-                          is_active: event.target.checked,
-                        }))}
-                      />
-                    }
-                    label="Available to customers"
-                  />
-                  <Stack direction="row" spacing={1}>
-                    <Button
-                      type="button"
-                      variant="contained"
-                      onClick={() => void savePaymentMethod()}
-                      disabled={isSavingPaymentMethod || isLoadingPaymentMethods}
-                    >
-                      {isSavingPaymentMethod ? 'Saving…' : paymentDraft.id ? 'Save payment method' : 'Add payment method'}
-                    </Button>
-                    {paymentDraft.id && (
-                      <Button
-                        type="button"
+                        sx={{ alignSelf: 'flex-start' }}
                         onClick={() => {
-                          setPaymentDraft(emptyPaymentMethod)
-                          setPaymentQrFile(null)
-                          setErrorMessage('')
+                          setDiningTableDraft({ id: '', label: '' })
+                          setDiningTableDialogOpen(true)
                         }}
                       >
-                        Cancel edit
+                        Add dining table
                       </Button>
-                    )}
-                  </Stack>
+                    </Stack>
+                  </Box>
                 </Stack>
               )}
             </Stack>
@@ -706,6 +636,127 @@ export default function AdminBranchesPage() {
             <Button type="submit" variant="contained" disabled={isSaving}>{isSaving ? 'Saving…' : draft.id ? 'Save branch' : 'Create branch'}</Button>
           </DialogActions>
         </Box>
+      </Dialog>
+      <Dialog
+        open={paymentDialogOpen}
+        onClose={() => !isSavingPaymentMethod && setPaymentDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <Box component="form" onSubmit={(event) => {
+          event.preventDefault()
+          void savePaymentMethod()
+        }}>
+          <DialogTitle>{paymentDraft.id ? `Edit ${paymentDraft.name}` : 'Add payment method'}</DialogTitle>
+          <DialogContent dividers>
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
+              <TextField
+                label="Payment method name"
+                value={paymentDraft.name}
+                onChange={(event) => setPaymentDraft((current) => ({ ...current, name: event.target.value }))}
+                placeholder="e.g. GCash, Cash, MariBank, BDO"
+                required
+                slotProps={{ htmlInput: { maxLength: 80 } }}
+              />
+              <FormControl>
+                <InputLabel id="payment-settlement-label">Payment type</InputLabel>
+                <Select
+                  labelId="payment-settlement-label"
+                  label="Payment type"
+                  value={paymentDraft.settlement_type}
+                  onChange={(event) => setPaymentDraft((current) => ({
+                    ...current,
+                    settlement_type: event.target.value,
+                  }))}
+                >
+                  <MenuItem value="pay_at_branch">Cash / pay at branch</MenuItem>
+                  <MenuItem value="provider">Online QR payment</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                label="Customer instructions (optional)"
+                value={paymentDraft.instructions}
+                onChange={(event) => setPaymentDraft((current) => ({
+                  ...current,
+                  instructions: event.target.value,
+                }))}
+                multiline
+                minRows={2}
+                slotProps={{ htmlInput: { maxLength: 500 } }}
+              />
+              {paymentDraft.settlement_type === 'provider' && (
+                <>
+                  <Button
+                    type="button"
+                    component="label"
+                    variant="outlined"
+                    sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', alignSelf: 'flex-start' }}
+                  >
+                    {paymentQrFile?.name || (paymentDraft.qr_code_path ? 'Replace QR code' : 'Upload QR code')}
+                    <input
+                      hidden
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) => {
+                        setPaymentQrFile(event.target.files?.[0] || null)
+                        event.target.value = ''
+                      }}
+                    />
+                  </Button>
+                  <Typography variant="caption" color="text.secondary">
+                    JPG, PNG, or WebP · up to 5 MB. Staff verify uploaded customer receipts before marking payment complete.
+                  </Typography>
+                </>
+              )}
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={paymentDraft.is_active}
+                    onChange={(event) => setPaymentDraft((current) => ({
+                      ...current,
+                      is_active: event.target.checked,
+                    }))}
+                  />
+                }
+                label="Available to customers"
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2 }}>
+            <Button type="button" onClick={() => setPaymentDialogOpen(false)} disabled={isSavingPaymentMethod}>Cancel</Button>
+            <Button type="submit" variant="contained" disabled={isSavingPaymentMethod || isLoadingPaymentMethods}>
+              {isSavingPaymentMethod ? 'Saving…' : paymentDraft.id ? 'Save payment method' : 'Add payment method'}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+      <Dialog
+        open={diningTableDialogOpen}
+        onClose={() => !isSavingDiningTable && setDiningTableDialogOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>{diningTableDraft.id ? 'Edit dining table' : 'Add dining table'}</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            sx={{ mt: 1 }}
+            label="Table name or number"
+            value={diningTableDraft.label}
+            onChange={(event) => setDiningTableDraft((current) => ({
+              ...current,
+              label: event.target.value,
+            }))}
+            slotProps={{ htmlInput: { maxLength: 40 } }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDiningTableDialogOpen(false)} disabled={isSavingDiningTable}>Cancel</Button>
+          <Button variant="contained" onClick={() => void saveDiningTable()} disabled={isSavingDiningTable}>
+            {isSavingDiningTable ? 'Saving…' : diningTableDraft.id ? 'Save table' : 'Add table'}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Container>
   )

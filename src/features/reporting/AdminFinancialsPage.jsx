@@ -5,12 +5,22 @@ import {
   Button,
   CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -21,6 +31,7 @@ import PaginationControls from '../../components/PaginationControls.jsx'
 import {
   downloadCsv,
   getAllBranchExpenses,
+  getAllOperationalReport,
   getBranchExpenses,
   getFinancialReport,
   recordBranchExpense,
@@ -58,6 +69,128 @@ function emptyExpense() {
   }
 }
 
+function dateKeyInManila(value) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(value))
+  const part = (type) => parts.find((item) => item.type === type)?.value
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
+function buildDailySalesTrend(rows, startDate, endDate) {
+  const totals = new Map()
+  for (const row of rows) {
+    if (row.status !== 'completed') continue
+    const key = dateKeyInManila(row.created_at)
+    totals.set(key, (totals.get(key) || 0) + Number(row.total || 0))
+  }
+
+  const days = []
+  const current = new Date(`${startDate}T00:00:00`)
+  const lastDay = new Date(`${endDate}T00:00:00`)
+  while (current <= lastDay) {
+    const key = dateString(current)
+    days.push({ date: key, total: totals.get(key) || 0 })
+    current.setDate(current.getDate() + 1)
+  }
+  return days
+}
+
+function SalesTrendChart({ data }) {
+  const width = 900
+  const height = 280
+  const padding = { top: 20, right: 20, bottom: 42, left: 88 }
+  const plotWidth = width - padding.left - padding.right
+  const plotHeight = height - padding.top - padding.bottom
+  const maxValue = Math.max(...data.map(({ total }) => total), 0)
+  const scaleMax = maxValue > 0 ? maxValue * 1.15 : 1
+  const points = data.map((item, index) => ({
+    ...item,
+    x: padding.left + (data.length > 1 ? (index / (data.length - 1)) * plotWidth : plotWidth / 2),
+    y: padding.top + plotHeight - (item.total / scaleMax) * plotHeight,
+  }))
+  const linePath = points.map((point, index) =>
+    `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`,
+  ).join(' ')
+  const areaPath = points.length
+    ? `${linePath} L ${points.at(-1).x} ${padding.top + plotHeight} L ${points[0].x} ${padding.top + plotHeight} Z`
+    : ''
+  const tickCount = 4
+  const axisLabel = (value) => new Intl.NumberFormat('en-PH', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value)
+  const dateLabel = (value) => new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+  })
+  const labelIndexes = new Set([
+    0,
+    Math.floor((data.length - 1) / 4),
+    Math.floor((data.length - 1) / 2),
+    Math.floor(((data.length - 1) * 3) / 4),
+    data.length - 1,
+  ])
+
+  return (
+    <Box sx={{ overflowX: 'auto', mx: { xs: -1, sm: 0 } }}>
+      <Box sx={{ minWidth: { xs: 560, sm: 0 } }}>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label="Daily completed-order net sales trend"
+          style={{ display: 'block', width: '100%', height: 'auto', overflow: 'visible' }}
+        >
+          <defs>
+            <linearGradient id="financial-sales-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#8a6248" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#8a6248" stopOpacity="0.015" />
+            </linearGradient>
+          </defs>
+          {Array.from({ length: tickCount + 1 }, (_, index) => {
+            const value = (scaleMax * (tickCount - index)) / tickCount
+            const y = padding.top + (plotHeight * index) / tickCount
+            return (
+              <g key={index}>
+                <line
+                  x1={padding.left}
+                  x2={width - padding.right}
+                  y1={y}
+                  y2={y}
+                  stroke="#e9e1d8"
+                  strokeDasharray={index === tickCount ? undefined : '3 5'}
+                />
+                <text x={padding.left - 12} y={y + 4} textAnchor="end" fill="#70665d" fontSize="12">
+                  {axisLabel(value)}
+                </text>
+              </g>
+            )
+          })}
+          {areaPath && <path d={areaPath} fill="url(#financial-sales-fill)" />}
+          {linePath && (
+            <path d={linePath} fill="none" stroke="#5b3927" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+          )}
+          {points.map((point, index) => (
+            <g key={point.date}>
+              <circle cx={point.x} cy={point.y} r={data.length <= 31 ? 4 : 2.5} fill="#fffdf9" stroke="#5b3927" strokeWidth="2">
+                <title>{`${dateLabel(point.date)}: ${formatPrice(point.total)}`}</title>
+              </circle>
+              {labelIndexes.has(index) && (
+                <text x={point.x} y={height - 12} textAnchor="middle" fill="#70665d" fontSize="12">
+                  {dateLabel(point.date)}
+                </text>
+              )}
+            </g>
+          ))}
+        </svg>
+      </Box>
+    </Box>
+  )
+}
+
 export default function AdminFinancialsPage() {
   const { account, hasPermission } = useAuth()
   const isSuperAdmin = account.roles.includes('super_admin')
@@ -76,17 +209,22 @@ export default function AdminFinancialsPage() {
   })
   const [endDate, setEndDate] = useState(() => dateString(new Date()))
   const [summary, setSummary] = useState(null)
+  const [salesTrendState, setSalesTrendState] = useState({ key: '', data: [] })
+  const [salesTrendError, setSalesTrendError] = useState({ key: '', message: '' })
   const [expenses, setExpenses] = useState([])
   const [expensePage, setExpensePage] = useState(0)
   const [expensePageSize, setExpensePageSize] = useState(DEFAULT_PAGE_SIZE)
   const [expenseForm, setExpenseForm] = useState(emptyExpense)
   const [voidReasons, setVoidReasons] = useState({})
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false)
+  const [expenseToVoid, setExpenseToVoid] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isExportingExpenses, setIsExportingExpenses] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const salesTrendKey = `${branchId}|${startDate}|${endDate}|${reloadKey}`
 
   useEffect(() => {
     let active = true
@@ -128,6 +266,23 @@ export default function AdminFinancialsPage() {
     return () => { active = false }
   }, [branchId, branchesLoaded, endDate, expensePage, expensePageSize, isSuperAdmin, reloadKey, startDate])
 
+  useEffect(() => {
+    if (!branchesLoaded || (!isSuperAdmin && !branchId)) return undefined
+    let active = true
+    getAllOperationalReport(branchId, startDate, endDate)
+      .then((orders) => {
+        if (active) setSalesTrendState({
+          key: salesTrendKey,
+          data: buildDailySalesTrend(orders, startDate, endDate),
+        })
+      })
+      .catch((error) => {
+        console.error('Unable to load daily sales trend.', error)
+        if (active) setSalesTrendError({ key: salesTrendKey, message: error.message })
+      })
+    return () => { active = false }
+  }, [branchId, branchesLoaded, endDate, isSuperAdmin, reloadKey, salesTrendKey, startDate])
+
   async function createExpense(event) {
     event.preventDefault()
     if (!branchId) {
@@ -145,6 +300,7 @@ export default function AdminFinancialsPage() {
         note: expenseForm.note.trim(),
       })
       setExpenseForm(emptyExpense())
+      setExpenseDialogOpen(false)
       setSuccessMessage('Expense recorded and included in financial monitoring.')
       setIsLoading(true)
       setExpensePage(0)
@@ -169,6 +325,7 @@ export default function AdminFinancialsPage() {
     try {
       await voidBranchExpense(expense.id, reason)
       setSuccessMessage('Expense voided. Its original record remains in the audit history.')
+      setExpenseToVoid(null)
       setIsLoading(true)
       setExpensePage(0)
       setReloadKey((key) => key + 1)
@@ -324,61 +481,159 @@ export default function AdminFinancialsPage() {
             </Button>
           </Stack>
         </Paper>
+        {canExport && (
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1}
+            useFlexGap
+            sx={{ flexWrap: 'wrap', alignItems: { sm: 'center' } }}
+          >
+            <Button variant="contained" onClick={exportSummary} disabled={isLoading || !summary}>
+              Export financial summary CSV
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => void exportExpenses()}
+              disabled={isExportingExpenses || isLoading}
+            >
+              {isExportingExpenses ? 'Preparing expenses CSV…' : 'Export all expenses CSV'}
+            </Button>
+          </Stack>
+        )}
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         {successMessage && <Alert severity="success">{successMessage}</Alert>}
         {isLoading ? (
           <Stack sx={{ alignItems: 'center', py: 8 }}><CircularProgress /></Stack>
         ) : !errorMessage && summary && (
           <>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} useFlexGap sx={{ flexWrap: 'wrap' }}>
-              <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 170 }}>
-                <Typography variant="body2" color="text.secondary">Completed orders</Typography>
-                <Typography variant="h5">{summary.completed_orders}</Typography>
-              </Paper>
-              <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 170 }}>
-                <Typography variant="body2" color="text.secondary">Net sales</Typography>
-                <Typography variant="h5">{formatPrice(summary.net_sales)}</Typography>
-              </Paper>
-              <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 170 }}>
-                <Typography variant="body2" color="text.secondary">Payments collected in date range</Typography>
-                <Typography variant="h5">{formatPrice(summary.collected_sales)}</Typography>
-                <Typography variant="caption" color="text.secondary">{summary.paid_orders} paid order(s)</Typography>
-              </Paper>
-              <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 170 }}>
-                <Typography variant="body2" color="text.secondary">Estimated ingredient cost</Typography>
-                <Typography variant="h5">
-                  {summary.cost_of_goods == null ? 'Incomplete' : formatPrice(summary.cost_of_goods)}
-                </Typography>
-              </Paper>
-              <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 170 }}>
-                <Typography variant="body2" color="text.secondary">Manual closing usage cost</Typography>
-                <Typography variant="h5">{formatPrice(summary.manual_usage_cost ?? 0)}</Typography>
-                {!!Number(summary.uncosted_manual_usage) && (
-                  <Typography variant="caption" color="warning.main">
-                    {summary.uncosted_manual_usage} usage record(s) without cost
+            <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, overflow: 'hidden' }}>
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="h6" fontWeight={800}>Daily net sales</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Completed orders by order date · {startDate} to {endDate}
+                  </Typography>
+                </Box>
+                {salesTrendState.key !== salesTrendKey && salesTrendError.key !== salesTrendKey ? (
+                  <Stack sx={{ alignItems: 'center', py: 5 }}><CircularProgress size={28} /></Stack>
+                ) : salesTrendError.key === salesTrendKey ? (
+                  <Alert severity="warning">Sales trend unavailable: {salesTrendError.message}</Alert>
+                ) : salesTrendState.data.length ? (
+                  <SalesTrendChart data={salesTrendState.data} />
+                ) : (
+                  <Typography color="text.secondary" sx={{ py: 5, textAlign: 'center' }}>
+                    No completed-order sales in this date range.
                   </Typography>
                 )}
-              </Paper>
-              <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 170 }}>
-                <Typography variant="body2" color="text.secondary">Inventory purchases</Typography>
-                <Typography variant="h5">{formatPrice(summary.inventory_purchases ?? 0)}</Typography>
-                {!!Number(summary.uncosted_inventory_purchases) && (
-                  <Typography variant="caption" color="warning.main">
-                    {summary.uncosted_inventory_purchases} receipt(s) without cost
-                  </Typography>
-                )}
-              </Paper>
-              <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 170 }}>
-                <Typography variant="body2" color="text.secondary">Recorded expenses</Typography>
-                <Typography variant="h5">{formatPrice(summary.expenses)}</Typography>
-              </Paper>
-              <Paper variant="outlined" sx={{ p: 2, flex: 1, minWidth: 170 }}>
-                <Typography variant="body2" color="text.secondary">Estimated profit</Typography>
-                <Typography variant="h5">
-                  {summary.estimated_profit == null ? 'Incomplete' : formatPrice(summary.estimated_profit)}
-                </Typography>
-              </Paper>
-            </Stack>
+              </Stack>
+            </Paper>
+            <Box>
+              <Typography variant="h5" sx={{ mb: 1.5 }}>Financial overview</Typography>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: 'repeat(2, minmax(0, 1fr))',
+                    md: 'repeat(4, minmax(0, 1fr))',
+                  },
+                  gap: { xs: 1.25, sm: 2 },
+                }}
+              >
+                {[
+                  {
+                    title: 'Estimated profit',
+                    value: summary.estimated_profit == null ? 'Incomplete' : formatPrice(summary.estimated_profit),
+                    detail: 'Net sales less estimated costs',
+                    color: summary.estimated_profit < 0 ? '#b42318' : '#2e6b4e',
+                    featured: true,
+                  },
+                  {
+                    title: 'Net sales',
+                    value: formatPrice(summary.net_sales),
+                    detail: `${summary.completed_orders} completed orders`,
+                    color: '#5b3927',
+                  },
+                  {
+                    title: 'Collected payments',
+                    value: formatPrice(summary.collected_sales),
+                    detail: `${summary.paid_orders} paid orders in date range`,
+                    color: '#315f78',
+                  },
+                  {
+                    title: 'Recorded expenses',
+                    value: formatPrice(summary.expenses),
+                    detail: 'Non-voided branch expenses',
+                    color: '#9a5a22',
+                  },
+                  {
+                    title: 'Estimated ingredient cost',
+                    value: summary.cost_of_goods == null ? 'Incomplete' : formatPrice(summary.cost_of_goods),
+                    detail: 'Cost of ingredients used',
+                    color: '#74519a',
+                  },
+                  {
+                    title: 'Closing usage cost',
+                    value: formatPrice(summary.manual_usage_cost ?? 0),
+                    detail: Number(summary.uncosted_manual_usage)
+                      ? `${summary.uncosted_manual_usage} records missing cost`
+                      : 'Manual inventory usage',
+                    color: '#687d36',
+                    warning: !!Number(summary.uncosted_manual_usage),
+                  },
+                  {
+                    title: 'Inventory purchases',
+                    value: formatPrice(summary.inventory_purchases ?? 0),
+                    detail: Number(summary.uncosted_inventory_purchases)
+                      ? `${summary.uncosted_inventory_purchases} receipts missing cost`
+                      : 'Stock receipt spending',
+                    color: '#a05442',
+                    warning: !!Number(summary.uncosted_inventory_purchases),
+                  },
+                  {
+                    title: 'Gross sales',
+                    value: formatPrice(summary.gross_sales),
+                    detail: `${formatPrice(summary.discounts)} in discounts`,
+                    color: '#47776f',
+                  },
+                ].map((metric) => (
+                  <Paper
+                    key={metric.title}
+                    variant="outlined"
+                    sx={{
+                      p: { xs: 1.5, sm: 2 },
+                      minWidth: 0,
+                      borderTop: 3,
+                      borderTopColor: metric.color,
+                      bgcolor: metric.featured ? 'rgba(46, 107, 78, 0.045)' : 'background.paper',
+                    }}
+                  >
+                    <Stack spacing={0.75} sx={{ height: '100%' }}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={700}>
+                        {metric.title}
+                      </Typography>
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          color: metric.color,
+                          fontWeight: 800,
+                          lineHeight: 1.2,
+                          overflowWrap: 'anywhere',
+                        }}
+                      >
+                        {metric.value}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color={metric.warning ? 'warning.main' : 'text.secondary'}
+                        sx={{ mt: 'auto' }}
+                      >
+                        {metric.detail}
+                      </Typography>
+                    </Stack>
+                  </Paper>
+                ))}
+              </Box>
+            </Box>
             <Alert severity={
               Number(summary.uncosted_orders) ||
               Number(summary.uncosted_manual_usage) ||
@@ -392,29 +647,16 @@ export default function AdminFinancialsPage() {
               {!!Number(summary.uncosted_inventory_purchases) &&
                 ` ${summary.uncosted_inventory_purchases} restock receipt(s) have no cost, so inventory purchase spending is incomplete.`}
             </Alert>
-            {canExport && (
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1}
-                useFlexGap
-                sx={{ flexWrap: 'wrap' }}
-              >
-                <Button variant="contained" onClick={exportSummary}>
-                  Export financial summary CSV
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={() => void exportExpenses()}
-                  disabled={isExportingExpenses}
-                >
-                  {isExportingExpenses ? 'Preparing expenses CSV…' : 'Export all expenses CSV'}
-                </Button>
-              </Stack>
-            )}
             {canCreate && (
-              <Paper component="form" onSubmit={createExpense} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+              <>
+              <Button variant="contained" sx={{ alignSelf: 'flex-start' }} onClick={() => setExpenseDialogOpen(true)}>
+                Record expense
+              </Button>
+              <Dialog open={expenseDialogOpen} onClose={() => !isSaving && setExpenseDialogOpen(false)} fullWidth maxWidth="sm">
+                <Box component="form" onSubmit={createExpense}>
+                  <DialogTitle>Record a branch expense</DialogTitle>
+                  <DialogContent dividers>
                 <Stack spacing={2}>
-                  <Typography variant="h6">Record a branch expense</Typography>
                   {!branchId && (
                     <Alert severity="info">Select one branch to record an expense. Expenses are branch-specific.</Alert>
                   )}
@@ -462,56 +704,67 @@ export default function AdminFinancialsPage() {
                     multiline
                     minRows={2}
                   />
-                  <Button type="submit" variant="contained" disabled={isSaving || !branchId}>
-                    {isSaving ? 'Saving…' : 'Record expense'}
-                  </Button>
                 </Stack>
-              </Paper>
+                  </DialogContent>
+                  <DialogActions sx={{ px: 3, py: 2 }}>
+                    <Button onClick={() => setExpenseDialogOpen(false)} disabled={isSaving}>Cancel</Button>
+                    <Button type="submit" variant="contained" disabled={isSaving || !branchId}>
+                      {isSaving ? 'Saving…' : 'Record expense'}
+                    </Button>
+                  </DialogActions>
+                </Box>
+              </Dialog>
+              </>
             )}
             <Box>
               <Typography variant="h5" gutterBottom>Expense records</Typography>
               {!expenses.length && expensePage === 0 ? (
                 <Alert severity="info">No expenses were recorded in this date range.</Alert>
               ) : expenses.length ? (
-                <Stack spacing={1.5}>
-                  {expenses.map((expense) => (
-                    <Paper key={expense.id} variant="outlined" sx={{ p: 2 }}>
-                      <Stack spacing={1}>
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'space-between' }}>
-                          <Box>
-                            <Typography fontWeight={700}>{expense.description}</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {expense.occurred_on} · {branches.find((branch) => branch.id === expense.branch_id)?.name}
-                              {' · '}{label(expense.category)}
-                            </Typography>
-                          </Box>
-                          <Typography fontWeight={700}>{formatPrice(expense.amount)}</Typography>
-                        </Stack>
-                        {expense.note && <Typography variant="body2">{expense.note}</Typography>}
-                        {expense.voided_at ? (
-                          <Alert severity="warning">Voided: {expense.void_reason}</Alert>
-                        ) : canVoid ? (
-                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                            <TextField
-                              size="small"
-                              label="Void reason"
-                              value={voidReasons[expense.id] || ''}
-                              onChange={(event) => setVoidReasons((current) => ({ ...current, [expense.id]: event.target.value }))}
-                            />
-                            <Button
-                              color="error"
-                              variant="outlined"
-                              disabled={isSaving}
-                              onClick={() => cancelExpense(expense)}
-                            >
-                              Void expense
-                            </Button>
-                          </Stack>
-                        ) : null}
-                      </Stack>
-                    </Paper>
-                  ))}
-                </Stack>
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small" aria-label="Expense records" sx={{ minWidth: 780 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Branch</TableCell>
+                        <TableCell>Category</TableCell>
+                        <TableCell>Description</TableCell>
+                        <TableCell>Note</TableCell>
+                        <TableCell align="right">Amount</TableCell>
+                        <TableCell>Status</TableCell>
+                        {canVoid && <TableCell align="right">Action</TableCell>}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {expenses.map((expense) => (
+                        <TableRow key={expense.id} hover>
+                          <TableCell>{expense.occurred_on}</TableCell>
+                          <TableCell>{branches.find((branch) => branch.id === expense.branch_id)?.name || '—'}</TableCell>
+                          <TableCell>{label(expense.category)}</TableCell>
+                          <TableCell>{expense.description}</TableCell>
+                          <TableCell>{expense.note || '—'}</TableCell>
+                          <TableCell align="right">{formatPrice(expense.amount)}</TableCell>
+                          <TableCell>{expense.voided_at ? `Voided · ${expense.void_reason}` : 'Active'}</TableCell>
+                          {canVoid && (
+                            <TableCell align="right">
+                              {!expense.voided_at && (
+                                <Button
+                                  size="small"
+                                  color="error"
+                                  variant="outlined"
+                                  disabled={isSaving}
+                                  onClick={() => setExpenseToVoid(expense)}
+                                >
+                                  Void
+                                </Button>
+                              )}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               ) : (
                 <Alert severity="info">No expenses were found on this page.</Alert>
               )}
@@ -529,6 +782,37 @@ export default function AdminFinancialsPage() {
                 />
               )}
             </Box>
+            <Dialog open={Boolean(expenseToVoid)} onClose={() => !isSaving && setExpenseToVoid(null)} fullWidth maxWidth="xs">
+              <DialogTitle>Void expense</DialogTitle>
+              <DialogContent>
+                <Stack spacing={2} sx={{ pt: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {expenseToVoid?.description} · {formatPrice(expenseToVoid?.amount)}
+                  </Typography>
+                  <TextField
+                    label="Reason for voiding"
+                    value={expenseToVoid ? (voidReasons[expenseToVoid.id] || '') : ''}
+                    onChange={(event) => expenseToVoid && setVoidReasons((current) => ({
+                      ...current,
+                      [expenseToVoid.id]: event.target.value,
+                    }))}
+                    required
+                    slotProps={{ htmlInput: { minLength: 3, maxLength: 500 } }}
+                  />
+                </Stack>
+              </DialogContent>
+              <DialogActions sx={{ px: 3, pb: 2 }}>
+                <Button onClick={() => setExpenseToVoid(null)} disabled={isSaving}>Cancel</Button>
+                <Button
+                  color="error"
+                  variant="contained"
+                  disabled={isSaving || (expenseToVoid && (voidReasons[expenseToVoid.id]?.trim().length || 0) < 3)}
+                  onClick={() => expenseToVoid && void cancelExpense(expenseToVoid)}
+                >
+                  Void expense
+                </Button>
+              </DialogActions>
+            </Dialog>
           </>
         )}
       </Stack>

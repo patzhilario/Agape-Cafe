@@ -28,11 +28,6 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import Accordion from '@mui/material/Accordion'
-import AccordionDetails from '@mui/material/AccordionDetails'
-import AccordionSummary from '@mui/material/AccordionSummary'
-import Chip from '@mui/material/Chip'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useAuth } from '../auth/useAuth.js'
 import { getAdminBranches } from './adminData.js'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
@@ -70,6 +65,9 @@ function AdminMenuPage() {
   const [availabilityReloadKey, setAvailabilityReloadKey] = useState(0)
   const [productDialogOpen, setProductDialogOpen] = useState(false)
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  const [editingProductId, setEditingProductId] = useState('')
+  const [optionDialogType, setOptionDialogType] = useState('')
+  const editingProduct = products.find((product) => product.id === editingProductId)
 
   const canEditBranchMenu = isSuperAdmin || (
     account.branchAssignments.some((assignment) => assignment.branch_id === branchId) &&
@@ -283,6 +281,7 @@ function AdminMenuPage() {
         }))
       }
       setSuccessMessage(`${isVariant ? 'Size' : 'Add-on'} “${data.name}” saved to the database for ${product.name}.`)
+      setOptionDialogType('')
     } catch (error) {
       console.error('Unable to add product option.', error)
       setErrorMessage(error.message)
@@ -549,20 +548,30 @@ function AdminMenuPage() {
         )}
         {isSuperAdmin && menuView === 'catalog' && (
           <>
-            <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 } }}>
-              <Stack spacing={1}>
-                <Typography variant="h6">Categories</Typography>
-                {categories.length ? categories.map((category) => (
-                  <Stack key={category.id} direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' }, borderBottom: 1, borderColor: 'divider', py: 0.75 }}>
-                    <Typography>{category.name} <Typography component="span" variant="body2" color="text.secondary">· {category.slug}</Typography></Typography>
-                    <FormControlLabel
-                      control={<Switch checked={category.is_published} disabled={isSaving} onChange={(event) => publishCategory(category, event.target.checked)} />}
-                      label={category.is_published ? 'Published' : 'Unpublished'}
-                    />
-                  </Stack>
-                )) : <Typography color="text.secondary">No categories yet. Add one to organize the menu.</Typography>}
-              </Stack>
-            </Paper>
+            <Box>
+              <Typography variant="h6" sx={{ mb: 1 }}>Categories</Typography>
+              {categories.length ? (
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small" aria-label="Menu categories" sx={{ minWidth: 540 }}>
+                    <TableHead><TableRow><TableCell>Category</TableCell><TableCell>Slug</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
+                    <TableBody>
+                      {categories.map((category) => (
+                        <TableRow key={category.id} hover>
+                          <TableCell sx={{ fontWeight: 700 }}>{category.name}</TableCell>
+                          <TableCell>{category.slug}</TableCell>
+                          <TableCell>
+                            <FormControlLabel
+                              control={<Switch size="small" checked={category.is_published} disabled={isSaving} onChange={(event) => publishCategory(category, event.target.checked)} />}
+                              label={category.is_published ? 'Published' : 'Unpublished'}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : <Alert severity="info">No categories yet. Add one to organize the menu.</Alert>}
+            </Box>
             <Dialog open={categoryDialogOpen} onClose={() => !isSaving && setCategoryDialogOpen(false)} fullWidth maxWidth="xs">
               <Box component="form" onSubmit={createCategory}>
                 <DialogTitle>Add category</DialogTitle>
@@ -849,37 +858,49 @@ function AdminMenuPage() {
             </DialogActions>
           </Dialog>
         )}
-        {menuView === 'catalog' && isSuperAdmin && <Stack spacing={2}>
-          {products.length ? products.map((product) => {
+        {menuView === 'catalog' && isSuperAdmin && <Box>
+          {products.length ? (
+          <>
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small" aria-label="Product catalog" sx={{ minWidth: 700 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Product</TableCell>
+                  <TableCell>SKU</TableCell>
+                  <TableCell>Category</TableCell>
+                  <TableCell align="right">Price</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {products.map((product) => (
+                  <TableRow key={product.id} hover>
+                    <TableCell sx={{ fontWeight: 700 }}>{product.name}</TableCell>
+                    <TableCell>{product.sku}</TableCell>
+                    <TableCell>{categories.find((category) => category.id === product.category_id)?.name || '—'}</TableCell>
+                    <TableCell align="right">{formatPrice(product.price)}</TableCell>
+                    <TableCell>{product.is_published ? 'Published' : 'Unpublished'} · {product.is_available ? 'Available' : 'Unavailable'}</TableCell>
+                    <TableCell align="right">
+                      <Button size="small" variant="outlined" onClick={() => setEditingProductId(product.id)}>Edit</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          {products.map((product) => {
             const edit = productEdits[product.id] || {}
             return (
-              <Accordion key={product.id} disableGutters variant="outlined" sx={{ '&:before': { display: 'none' } }}>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', minWidth: 0 }}>
-                    {product.image_path && (
-                      <Box
-                        component="img"
-                        src={publicImageUrl(product.image_path)}
-                        alt=""
-                        loading="lazy"
-                        sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 1, flexShrink: 0 }}
-                      />
-                    )}
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography fontWeight={700} noWrap>{product.name}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {product.sku} · {formatPrice(product.price)}
-                      </Typography>
-                    </Box>
-                    <Chip
-                      size="small"
-                      color={product.is_published ? 'success' : 'default'}
-                      label={product.is_published ? 'Published' : 'Unpublished'}
-                      sx={{ ml: 'auto' }}
-                    />
-                  </Stack>
-                </AccordionSummary>
-                <AccordionDetails sx={{ pt: 0 }}>
+              <Dialog
+                key={product.id}
+                open={editingProductId === product.id}
+                onClose={() => !isSaving && setEditingProductId('')}
+                fullWidth
+                maxWidth="md"
+              >
+                <DialogTitle>Edit menu product · {product.name}</DialogTitle>
+                <DialogContent dividers>
                 <Stack spacing={2}>
                   {isSuperAdmin && menuView === 'catalog' && (
                     <>
@@ -908,10 +929,11 @@ function AdminMenuPage() {
                         )}
                         <Button
                           component="label"
+                          size="small"
                           variant="outlined"
-                          sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}
+                          sx={{ minWidth: 112, width: 'fit-content' }}
                         >
-                          {productImageFiles[product.id]?.name || 'Choose product photo'}
+                          {productImageFiles[product.id] ? 'Image selected' : 'Upload image'}
                           <input
                             hidden
                             type="file"
@@ -934,40 +956,132 @@ function AdminMenuPage() {
                       </Stack>
                       <Button variant="contained" onClick={() => saveProduct(product)} disabled={isSaving}>Save catalog details</Button>
                       <Stack spacing={1}>
-                        <Typography variant="subtitle1" fontWeight={700}>Sizes and add-ons</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Save each size or add-on with its own button below. “Save catalog details” only saves the product name, description, price, and photo.
-                        </Typography>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
+                          <Box>
+                            <Typography variant="subtitle1" fontWeight={700}>Sizes and add-ons</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Manage options separately from the product details.
+                            </Typography>
+                          </Box>
+                          <Stack direction="row" spacing={1}>
+                            <Button size="small" variant="outlined" onClick={() => setOptionDialogType('variant')}>
+                              Add size
+                            </Button>
+                            <Button size="small" variant="outlined" onClick={() => setOptionDialogType('addon')}>
+                              Add add-on
+                            </Button>
+                          </Stack>
+                        </Stack>
                         {[
                           ...variants.filter((entry) => entry.product_id === product.id)
                             .map((entry) => ({ ...entry, type: 'variant' })),
                           ...addons.filter((entry) => entry.product_id === product.id)
                             .map((entry) => ({ ...entry, type: 'addon' })),
-                        ].map((option) => (
-                          <Stack key={`${option.type}-${option.id}`} direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography>{option.type === 'variant' ? 'Size' : 'Add-on'}: {option.name} · {formatPrice(option.price)}</Typography>
-                            <FormControlLabel control={<Switch checked={option.is_active} disabled={isSaving} onChange={(event) => setOptionActive(option, option.type, event.target.checked)} />} label={option.is_active ? 'Active' : 'Inactive'} />
-                          </Stack>
-                        ))}
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                          <TextField label="Size name" value={optionDrafts[product.id]?.variantName || ''} onChange={(event) => setOptionDrafts((state) => ({ ...state, [product.id]: { ...state[product.id], variantName: event.target.value } }))} />
-                          <TextField label="Size price (PHP)" type="number" value={optionDrafts[product.id]?.variantPrice || ''} onChange={(event) => setOptionDrafts((state) => ({ ...state, [product.id]: { ...state[product.id], variantPrice: event.target.value } }))} slotProps={{ htmlInput: { min: '0', step: '0.01' } }} />
-                          <Button type="button" onClick={() => createOption(product, 'variant')} disabled={isSaving}>Save size</Button>
-                        </Stack>
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                          <TextField label="Add-on name" value={optionDrafts[product.id]?.addonName || ''} onChange={(event) => setOptionDrafts((state) => ({ ...state, [product.id]: { ...state[product.id], addonName: event.target.value } }))} />
-                          <TextField label="Add-on price (PHP)" type="number" value={optionDrafts[product.id]?.addonPrice || ''} onChange={(event) => setOptionDrafts((state) => ({ ...state, [product.id]: { ...state[product.id], addonPrice: event.target.value } }))} slotProps={{ htmlInput: { min: '0', step: '0.01' } }} />
-                          <Button type="button" onClick={() => createOption(product, 'addon')} disabled={isSaving}>Save add-on</Button>
-                        </Stack>
+                        ].length ? (
+                          <TableContainer component={Paper} variant="outlined">
+                            <Table size="small" aria-label={`${product.name} sizes and add-ons`}>
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell>Type</TableCell>
+                                  <TableCell>Name</TableCell>
+                                  <TableCell align="right">Price</TableCell>
+                                  <TableCell>Status</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {[
+                                  ...variants.filter((entry) => entry.product_id === product.id)
+                                    .map((entry) => ({ ...entry, type: 'variant' })),
+                                  ...addons.filter((entry) => entry.product_id === product.id)
+                                    .map((entry) => ({ ...entry, type: 'addon' })),
+                                ].map((option) => (
+                                  <TableRow key={`${option.type}-${option.id}`}>
+                                    <TableCell>{option.type === 'variant' ? 'Size' : 'Add-on'}</TableCell>
+                                    <TableCell>{option.name}</TableCell>
+                                    <TableCell align="right">{formatPrice(option.price)}</TableCell>
+                                    <TableCell>
+                                      <FormControlLabel
+                                        control={<Switch size="small" checked={option.is_active} disabled={isSaving} onChange={(event) => setOptionActive(option, option.type, event.target.checked)} />}
+                                        label={option.is_active ? 'Active' : 'Inactive'}
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No sizes or add-ons have been added yet.
+                          </Typography>
+                        )}
                       </Stack>
                     </>
                   )}
                 </Stack>
-                </AccordionDetails>
-              </Accordion>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, py: 2 }}>
+                  <Button onClick={() => setEditingProductId('')} disabled={isSaving}>Close</Button>
+                </DialogActions>
+              </Dialog>
             )
-          }) : <Alert severity="info">No products are configured. Add real catalog records; no sample products are created.</Alert>}
-        </Stack>}
+          })}
+          <Dialog
+            open={Boolean(optionDialogType && editingProduct)}
+            onClose={() => !isSaving && setOptionDialogType('')}
+            fullWidth
+            maxWidth="xs"
+          >
+            <DialogTitle>{optionDialogType === 'variant' ? 'Add size' : 'Add add-on'}</DialogTitle>
+            <DialogContent>
+              <Stack spacing={2} sx={{ pt: 1 }}>
+                <TextField
+                  autoFocus
+                  label={optionDialogType === 'variant' ? 'Size name' : 'Add-on name'}
+                  value={optionDialogType === 'variant'
+                    ? optionDrafts[editingProduct?.id]?.variantName || ''
+                    : optionDrafts[editingProduct?.id]?.addonName || ''}
+                  onChange={(event) => setOptionDrafts((state) => ({
+                    ...state,
+                    [editingProduct.id]: {
+                      ...state[editingProduct.id],
+                      [optionDialogType === 'variant' ? 'variantName' : 'addonName']: event.target.value,
+                    },
+                  }))}
+                  required
+                />
+                <TextField
+                  label="Price (PHP)"
+                  type="number"
+                  value={optionDialogType === 'variant'
+                    ? optionDrafts[editingProduct?.id]?.variantPrice || ''
+                    : optionDrafts[editingProduct?.id]?.addonPrice || ''}
+                  onChange={(event) => setOptionDrafts((state) => ({
+                    ...state,
+                    [editingProduct.id]: {
+                      ...state[editingProduct.id],
+                      [optionDialogType === 'variant' ? 'variantPrice' : 'addonPrice']: event.target.value,
+                    },
+                  }))}
+                  slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
+                  required
+                />
+              </Stack>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, py: 2 }}>
+              <Button onClick={() => setOptionDialogType('')} disabled={isSaving}>Cancel</Button>
+              <Button
+                variant="contained"
+                disabled={isSaving || !editingProduct}
+                onClick={() => editingProduct && void createOption(editingProduct, optionDialogType)}
+              >
+                {isSaving ? 'Saving…' : optionDialogType === 'variant' ? 'Add size' : 'Add add-on'}
+              </Button>
+            </DialogActions>
+          </Dialog>
+          </>
+          ) : <Alert severity="info">No products are configured. Add real catalog records; no sample products are created.</Alert>}
+        </Box>}
         {menuView === 'catalog' && publishedCategories.length > 0 && (
           <Typography variant="body2" color="text.secondary">
             Published categories: {publishedCategories.map((category) => category.name).join(', ')}

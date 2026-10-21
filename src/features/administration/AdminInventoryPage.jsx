@@ -482,8 +482,9 @@ function AdminInventoryPage() {
                 <Table size="small" aria-label="Detailed inventory and stock movement summary" sx={{ minWidth: 1280 }}>
                   <TableHead
                     sx={{
-                      bgcolor: 'primary.light',
+                      bgcolor: 'primary.main',
                       '& .MuiTableCell-root': {
+                        backgroundColor: 'primary.main',
                         color: 'primary.contrastText',
                         fontWeight: 700,
                         whiteSpace: 'nowrap',

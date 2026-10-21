@@ -17,6 +17,12 @@ import {
   Paper,
   Select,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -66,6 +72,13 @@ export default function AdminOrdersPage() {
   const [orders, setOrders] = useState([])
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [orderFilters, setOrderFilters] = useState({
+    status: '',
+    paymentStatus: '',
+    fulfillmentMethod: '',
+    dateFrom: '',
+    dateTo: '',
+  })
   const [cancelReasons, setCancelReasons] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [busyOrderId, setBusyOrderId] = useState('')
@@ -78,6 +91,8 @@ export default function AdminOrdersPage() {
   const [benefitDocumentUrls, setBenefitDocumentUrls] = useState({})
   const [benefitReviewNotes, setBenefitReviewNotes] = useState({})
   const [documentPreview, setDocumentPreview] = useState(null)
+  const [selectedOrderId, setSelectedOrderId] = useState('')
+  const selectedOrder = orders.find((order) => order.id === selectedOrderId)
 
   useEffect(() => {
     let active = true
@@ -103,7 +118,7 @@ export default function AdminOrdersPage() {
     setIsLoading(true)
     setErrorMessage('')
     try {
-      const loadedOrders = await getOrders(branchId, page, pageSize)
+      const loadedOrders = await getOrders(branchId, page, pageSize, orderFilters)
       setOrders(loadedOrders)
       const proofEntries = canEditOrders ? loadedOrders.flatMap((order) =>
         (order.payment_proof || [])
@@ -137,7 +152,7 @@ export default function AdminOrdersPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [branchId, canApproveBenefits, canEditOrders, page, pageSize])
+  }, [branchId, canApproveBenefits, canEditOrders, orderFilters, page, pageSize])
 
   useEffect(() => {
     void Promise.resolve().then(loadOrders)
@@ -263,13 +278,192 @@ export default function AdminOrdersPage() {
             </Select>
           </FormControl>
         )}
+        <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 } }}>
+          <Stack spacing={1.5}>
+            <Typography variant="subtitle2" color="text.secondary">FILTER ORDERS</Typography>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: {
+                  xs: '1fr',
+                  sm: 'repeat(2, minmax(0, 1fr))',
+                  lg: 'repeat(5, minmax(0, 1fr))',
+                },
+                gap: 1.5,
+              }}
+            >
+              <FormControl size="small">
+                <InputLabel id="orders-status-filter-label">Order status</InputLabel>
+                <Select
+                  labelId="orders-status-filter-label"
+                  label="Order status"
+                  value={orderFilters.status}
+                  onChange={(event) => {
+                    setPage(0)
+                    setOrderFilters((current) => ({ ...current, status: event.target.value }))
+                  }}
+                >
+                  <MenuItem value="">All statuses</MenuItem>
+                  {['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'].map((status) => (
+                    <MenuItem key={status} value={status}>{label(status)}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small">
+                <InputLabel id="orders-payment-filter-label">Payment</InputLabel>
+                <Select
+                  labelId="orders-payment-filter-label"
+                  label="Payment"
+                  value={orderFilters.paymentStatus}
+                  onChange={(event) => {
+                    setPage(0)
+                    setOrderFilters((current) => ({ ...current, paymentStatus: event.target.value }))
+                  }}
+                >
+                  <MenuItem value="">All payments</MenuItem>
+                  {['unpaid', 'pending', 'paid', 'failed', 'refunded', 'partially_refunded'].map((status) => (
+                    <MenuItem key={status} value={status}>{label(status)}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small">
+                <InputLabel id="orders-type-filter-label">Order type</InputLabel>
+                <Select
+                  labelId="orders-type-filter-label"
+                  label="Order type"
+                  value={orderFilters.fulfillmentMethod}
+                  onChange={(event) => {
+                    setPage(0)
+                    setOrderFilters((current) => ({ ...current, fulfillmentMethod: event.target.value }))
+                  }}
+                >
+                  <MenuItem value="">All types</MenuItem>
+                  {['dine_in', 'pickup', 'takeout', 'delivery'].map((method) => (
+                    <MenuItem key={method} value={method}>{label(method)}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                size="small"
+                type="date"
+                label="From date"
+                value={orderFilters.dateFrom}
+                onChange={(event) => {
+                  setPage(0)
+                  setOrderFilters((current) => ({ ...current, dateFrom: event.target.value }))
+                }}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+              <TextField
+                size="small"
+                type="date"
+                label="To date"
+                value={orderFilters.dateTo}
+                onChange={(event) => {
+                  setPage(0)
+                  setOrderFilters((current) => ({ ...current, dateTo: event.target.value }))
+                }}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+            </Box>
+            {Object.values(orderFilters).some(Boolean) && (
+              <Button
+                size="small"
+                onClick={() => {
+                  setPage(0)
+                  setOrderFilters({
+                    status: '',
+                    paymentStatus: '',
+                    fulfillmentMethod: '',
+                    dateFrom: '',
+                    dateTo: '',
+                  })
+                }}
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </Stack>
+        </Paper>
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         {successMessage && <Alert severity="success">{successMessage}</Alert>}
         {isLoading ? (
           <Stack sx={{ alignItems: 'center', py: 8 }}><CircularProgress /></Stack>
         ) : !orders.length && page === 0 ? (
           <Alert severity="info">No orders are available for this branch.</Alert>
-        ) : orders.map((order) => {
+        ) : (
+          <>
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small" aria-label="Branch orders" sx={{ minWidth: 920 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Order</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Customer</TableCell>
+                  <TableCell>Branch</TableCell>
+                  <TableCell>Type / table</TableCell>
+                  <TableCell align="right">Total</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Payment</TableCell>
+                  <TableCell align="right">Details</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {orders.map((order) => (
+                  <TableRow key={order.id} hover>
+                    <TableCell sx={{ fontWeight: 700 }}>{order.order_number}</TableCell>
+                    <TableCell>
+                      {new Intl.DateTimeFormat('en-PH', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      }).format(new Date(order.created_at))}
+                    </TableCell>
+                    <TableCell>{order.customer_name}</TableCell>
+                    <TableCell>{order.branch?.name || 'Branch'}</TableCell>
+                    <TableCell>
+                      {label(order.fulfillment_method)}
+                      {order.dining_table?.label ? ` · ${order.dining_table.label}` : ''}
+                    </TableCell>
+                    <TableCell align="right">{formatPrice(order.total)}</TableCell>
+                    <TableCell>
+                      <Chip
+                        color={order.status === 'cancelled' ? 'error' : order.status === 'completed' ? 'success' : 'primary'}
+                        label={label(order.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        color={order.payment_status === 'paid' ? 'success' : 'default'}
+                        label={label(order.payment_status)}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button size="small" variant="outlined" onClick={() => setSelectedOrderId(order.id)}>
+                        View
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <Dialog
+            open={Boolean(selectedOrderId)}
+            onClose={() => setSelectedOrderId('')}
+            fullWidth
+            maxWidth="lg"
+            aria-labelledby="admin-order-details-title"
+          >
+            <DialogTitle id="admin-order-details-title">
+              Order details{selectedOrder ? ` · ${selectedOrder.order_number}` : ''}
+            </DialogTitle>
+            <DialogContent dividers sx={{ maxHeight: '75vh' }}>
+        {orders.map((order) => {
+          if (order.id !== selectedOrderId) return null
           const payment = Array.isArray(order.payment) ? order.payment[0] : order.payment
           const isOnlinePayment = payment?.method?.settlement_type === 'provider'
           return (
@@ -615,6 +809,13 @@ export default function AdminOrdersPage() {
             </Stack>
           </Paper>
         )})}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setSelectedOrderId('')}>Close</Button>
+            </DialogActions>
+          </Dialog>
+          </>
+        )}
         {!isLoading && !errorMessage && (orders.length > 0 || page > 0) && (
           <PaginationControls
             page={page}

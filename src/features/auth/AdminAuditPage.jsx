@@ -8,6 +8,12 @@ import {
   Container,
   Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Typography,
 } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
@@ -188,46 +194,44 @@ export default function AdminAuditPage() {
         ) : !logs.length && page === 0 ? (
           <Alert severity="info">No audit events have been recorded yet.</Alert>
         ) : (
-          <Stack spacing={1.5}>
-            {logs.map((log) => {
-              const details = readableDetails(log.details)
-              return (
-                <Paper key={log.id} variant="outlined" sx={{ p: { xs: 2, sm: 2.5 } }}>
-                  <Stack spacing={1}>
-                    <Stack
-                      direction={{ xs: 'column', sm: 'row' }}
-                      spacing={1}
-                      sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}
-                    >
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                        <Chip size="small" color="primary" variant="outlined" label={label(log.action)} />
-                        <Typography variant="body2" color="text.secondary">
-                          {label(log.record_type)}
-                          {log.branch?.name ? ` · ${log.branch.name}` : ''}
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small" aria-label="Audit trail" sx={{ minWidth: 1000 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Action</TableCell>
+                  <TableCell>Record</TableCell>
+                  <TableCell>Administrator</TableCell>
+                  <TableCell>Branch</TableCell>
+                  <TableCell>Description and details</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {logs.map((log) => {
+                  const details = readableDetails(log.details)
+                  return (
+                    <TableRow key={log.id} hover>
+                      <TableCell>{new Date(log.created_at).toLocaleString()}</TableCell>
+                      <TableCell><Chip size="small" color="primary" variant="outlined" label={label(log.action)} /></TableCell>
+                      <TableCell>{label(log.record_type)}</TableCell>
+                      <TableCell>{log.actor?.display_name || log.actor?.email || 'System'}</TableCell>
+                      <TableCell>{log.branch?.name || '—'}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'normal', minWidth: 300 }}>
+                        <Typography variant="body2">
+                          {actionDescriptions[log.action] || `${label(log.action)}.`}
                         </Typography>
-                      </Stack>
-                      <Typography variant="body2" color="text.secondary">
-                        {new Date(log.created_at).toLocaleString()}
-                      </Typography>
-                    </Stack>
-                    <Typography fontWeight={600}>
-                      {log.actor?.display_name || log.actor?.email || 'System'}
-                    </Typography>
-                    <Typography>{actionDescriptions[log.action] || `${label(log.action)}.`}</Typography>
-                    {details.length > 0 && (
-                      <Stack spacing={0.5} sx={{ p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
                         {details.map((detail) => (
-                          <Typography key={detail.label} variant="body2">
+                          <Typography key={detail.label} variant="caption" color="text.secondary" component="div">
                             <strong>{detail.label}:</strong> {detail.value}
                           </Typography>
                         ))}
-                      </Stack>
-                    )}
-                  </Stack>
-                </Paper>
-              )
-            })}
-          </Stack>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
         {!isLoading && !errorMessage && (logs.length > 0 || page > 0) && (
           <PaginationControls

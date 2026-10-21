@@ -77,21 +77,22 @@ const theme = createTheme({
         root: {
           borderRadius: 999,
           minWidth: 0,
-          minHeight: 40,
+          minHeight: 36,
           maxWidth: '100%',
           boxSizing: 'border-box',
-          paddingInline: 16,
-          lineHeight: 1.35,
+          paddingInline: 14,
+          lineHeight: 1.25,
+          fontSize: '0.875rem',
           whiteSpace: 'nowrap',
           textAlign: 'center',
           '@media (max-width: 599.95px)': {
-            paddingInline: 12,
-            whiteSpace: 'normal',
+            paddingInline: 10,
           },
         },
         sizeSmall: {
-          minHeight: 36,
-          paddingInline: 12,
+          minHeight: 32,
+          paddingInline: 10,
+          fontSize: '0.8125rem',
         },
         startIcon: { flexShrink: 0 },
         endIcon: { flexShrink: 0 },
@@ -171,6 +172,81 @@ const theme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: { backgroundImage: 'none' },
+        outlined: {
+          borderColor: 'rgba(91, 57, 39, 0.14)',
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          borderRadius: 16,
+          transition: 'border-color 160ms ease, box-shadow 160ms ease',
+          '&.MuiPaper-outlined:hover': {
+            borderColor: 'rgba(91, 57, 39, 0.3)',
+            boxShadow: '0 8px 24px rgba(57, 35, 23, 0.07)',
+          },
+        },
+      },
+    },
+    MuiCardContent: {
+      styleOverrides: {
+        root: {
+          padding: 18,
+          '&:last-child': { paddingBottom: 18 },
+          '@media (max-width: 599.95px)': {
+            padding: 16,
+            '&:last-child': { paddingBottom: 16 },
+          },
+        },
+      },
+    },
+    MuiTableContainer: {
+      styleOverrides: {
+        root: {
+          borderRadius: 14,
+          border: '1px solid rgba(91, 57, 39, 0.12)',
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        root: {
+          padding: '11px 14px',
+          whiteSpace: 'nowrap',
+          verticalAlign: 'middle',
+          borderColor: 'rgba(91, 57, 39, 0.09)',
+        },
+        head: {
+          backgroundColor: '#f3eee8',
+          color: '#55483e',
+          fontSize: '0.75rem',
+          fontWeight: 800,
+          letterSpacing: '0.035em',
+        },
+        footer: {
+          backgroundColor: '#f8f5f0',
+          fontWeight: 800,
+        },
+        sizeSmall: {
+          padding: '9px 12px',
+        },
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          '&:last-child td, &:last-child th': { borderBottom: 0 },
+        },
+      },
+    },
+    MuiTable: {
+      styleOverrides: {
+        root: {
+          '& .MuiTableBody-root .MuiTableRow-root:hover': {
+            backgroundColor: 'rgba(91, 57, 39, 0.035)',
+          },
+        },
       },
     },
   },

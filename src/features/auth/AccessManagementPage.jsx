@@ -6,6 +6,10 @@ import {
   Checkbox,
   CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   FormGroup,
@@ -14,6 +18,12 @@ import {
   Paper,
   Select,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -52,6 +62,8 @@ export default function AccessManagementPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isInviting, setIsInviting] = useState(false)
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
+  const [accessDialogOpen, setAccessDialogOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const selectedUserIdRef = useRef(selectedUserId)
@@ -212,6 +224,7 @@ export default function AccessManagementPage() {
           ? `Access settings saved for ${selectedUser.email || 'the selected account'}.`
           : 'Access was saved, but the account list could not refresh. Reload this page to confirm the current settings.',
       )
+      setAccessDialogOpen(false)
     } catch (error) {
       console.error('Unable to save staff access settings.', error)
       setIsLoading(false)
@@ -264,6 +277,7 @@ export default function AccessManagementPage() {
       setInviteName('')
       setInviteBranches([])
       setInvitePermissions([])
+      setInviteDialogOpen(false)
     } catch (error) {
       console.error('Unable to add account access by email.', error)
       setErrorMessage(
@@ -297,19 +311,18 @@ export default function AccessManagementPage() {
             applied atomically and written to the audit trail.
           </Typography>
         </Box>
-        <Alert severity="info">
-          Add an email below to assign access before the user signs in. Existing
-          accounts are updated immediately; new accounts receive the selected
-          role on their first Google sign-in with that email.
-        </Alert>
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         {successMessage && <Alert severity="success">{successMessage}</Alert>}
-        <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+        <Button variant="contained" sx={{ alignSelf: 'flex-start' }} onClick={() => setInviteDialogOpen(true)}>
+          Add account
+        </Button>
+        <Dialog open={inviteDialogOpen} onClose={() => !isInviting && setInviteDialogOpen(false)} fullWidth maxWidth="md">
+          <DialogTitle>Add account by email</DialogTitle>
+          <DialogContent dividers>
           <Stack spacing={2.5}>
             <Box>
-              <Typography variant="h5">Add account by email</Typography>
               <Typography color="text.secondary">
-                The name and role will be assigned to this exact email address.
+                Existing accounts are updated immediately. New accounts receive this role at first Google sign-in.
               </Typography>
             </Box>
             <TextField
@@ -444,63 +457,84 @@ export default function AccessManagementPage() {
                 </Paper>
               </>
             )}
+          </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2 }}>
+            <Button onClick={() => setInviteDialogOpen(false)} disabled={isInviting}>Cancel</Button>
             <Button
               variant="contained"
               onClick={inviteUser}
               disabled={isInviting}
               startIcon={isInviting ? <CircularProgress size={18} color="inherit" /> : null}
-              sx={{ alignSelf: 'flex-start' }}
             >
-              Add account
+              {isInviting ? 'Saving…' : 'Add account'}
             </Button>
-          </Stack>
-        </Paper>
+          </DialogActions>
+        </Dialog>
         {!users.length ? (
           <Alert severity="info">
             No accounts have registered yet. You can preassign their access above.
           </Alert>
         ) : (
           <>
-            <FormControl fullWidth>
-              <InputLabel id="access-user-label">Account</InputLabel>
-              <Select
-                labelId="access-user-label"
-                label="Account"
-                value={selectedUserId}
-                onChange={(event) => {
-                  setSelectedUserId(event.target.value)
-                  const targetUserId = event.target.value
-                  setSelectedRole(
-                    userRoles.find((userRole) => userRole.user_id === targetUserId)?.role ||
-                      'customer',
-                  )
-                  setSelectedBranches(
-                    assignments
-                      .filter((assignment) => assignment.user_id === targetUserId)
-                      .map((assignment) => assignment.branch_id),
-                  )
-                  setSelectedPermissions(
-                    [
-                      ...new Set(
-                        userPermissions
-                          .filter((permission) => permission.user_id === targetUserId)
-                          .map((permission) => permission.permission_id),
-                      ),
-                    ],
-                  )
-                  setErrorMessage('')
-                  setSuccessMessage('')
-                }}
-              >
-                {users.map((user) => (
-                  <MenuItem key={user.id} value={user.id}>
-                    {user.display_name || user.email || user.id}
-                    {user.email && user.display_name ? ` · ${user.email}` : ''}
-                    {!user.is_active ? ' · Deactivated' : ''}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small" aria-label="Accounts and access" sx={{ minWidth: 750 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Email</TableCell>
+                    <TableCell>Role</TableCell>
+                    <TableCell>Branches</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Action</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {users.map((user) => {
+                    const role = userRoles.find((userRole) => userRole.user_id === user.id)?.role || 'customer'
+                    const branchNames = assignments
+                      .filter((assignment) => assignment.user_id === user.id)
+                      .map((assignment) => branches.find((branch) => branch.id === assignment.branch_id)?.name)
+                      .filter(Boolean)
+                    return (
+                      <TableRow key={user.id} hover>
+                        <TableCell sx={{ fontWeight: 700 }}>{user.display_name || '—'}</TableCell>
+                        <TableCell>{user.email || '—'}</TableCell>
+                        <TableCell>{roles.find((item) => item.value === role)?.label || role}</TableCell>
+                        <TableCell>{branchNames.join(', ') || 'All / none'}</TableCell>
+                        <TableCell>{user.is_active ? 'Active' : 'Deactivated'}</TableCell>
+                        <TableCell align="right">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={user.id === account.id}
+                            onClick={() => {
+                              setSelectedUserId(user.id)
+                              setSelectedRole(role)
+                              setSelectedBranches(assignments
+                                .filter((assignment) => assignment.user_id === user.id)
+                                .map((assignment) => assignment.branch_id))
+                              setSelectedPermissions([...new Set(userPermissions
+                                .filter((permission) => permission.user_id === user.id)
+                                .map((permission) => permission.permission_id))])
+                              setErrorMessage('')
+                              setSuccessMessage('')
+                              setAccessDialogOpen(true)
+                            }}
+                          >
+                            Edit access
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <Dialog open={accessDialogOpen} onClose={() => !isSaving && setAccessDialogOpen(false)} fullWidth maxWidth="md">
+              <DialogTitle>Edit account access{selectedUser?.email ? ` · ${selectedUser.email}` : ''}</DialogTitle>
+              <DialogContent dividers>
+                <Stack spacing={2.5} sx={{ pt: 1 }}>
             {selectedUserId === account.id && (
               <Alert severity="info">
                 Your own Super Admin access is protected from changes here.
@@ -613,17 +647,6 @@ export default function AccessManagementPage() {
                   : 'Customer accounts do not receive branch or administrative module permissions.'}
               </Alert>
             )}
-            {selectedUserId !== account.id && (
-              <Button
-                variant="contained"
-                onClick={saveAccess}
-                disabled={isSaving || !selectedUserId}
-                startIcon={isSaving ? <CircularProgress size={18} color="inherit" /> : null}
-                sx={{ alignSelf: 'flex-start' }}
-              >
-                Save account access
-              </Button>
-            )}
             {selectedUserId && (
               <Typography variant="body2" color="text.secondary">
                 Current access: {currentRoles.join(', ') || 'No role'}
@@ -633,6 +656,22 @@ export default function AccessManagementPage() {
                   : ''}
               </Typography>
             )}
+                </Stack>
+              </DialogContent>
+              <DialogActions sx={{ px: 3, py: 2 }}>
+                <Button onClick={() => setAccessDialogOpen(false)} disabled={isSaving}>Cancel</Button>
+                {selectedUserId !== account.id && (
+                  <Button
+                    variant="contained"
+                    onClick={saveAccess}
+                    disabled={isSaving || !selectedUserId}
+                    startIcon={isSaving ? <CircularProgress size={18} color="inherit" /> : null}
+                  >
+                    Save account access
+                  </Button>
+                )}
+              </DialogActions>
+            </Dialog>
           </>
         )}
       </Stack>
