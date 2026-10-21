@@ -9,8 +9,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   FormControlLabel,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Switch,
   TextField,
@@ -29,15 +33,28 @@ const emptyBranch = {
   phone: '',
   email: '',
   is_active: true,
-  gcash_qr_path: '',
   delivery_enabled: false,
   delivery_fee: '0',
+}
+
+const emptyPaymentMethod = {
+  id: '',
+  code: '',
+  name: '',
+  instructions: '',
+  settlement_type: 'pay_at_branch',
+  is_active: true,
+  qr_code_path: '',
 }
 
 export default function AdminBranchesPage() {
   const [branches, setBranches] = useState([])
   const [draft, setDraft] = useState(emptyBranch)
-  const [qrFile, setQrFile] = useState(null)
+  const [branchPaymentMethods, setBranchPaymentMethods] = useState([])
+  const [paymentDraft, setPaymentDraft] = useState(emptyPaymentMethod)
+  const [paymentQrFile, setPaymentQrFile] = useState(null)
+  const [isLoadingPaymentMethods, setIsLoadingPaymentMethods] = useState(false)
+  const [isSavingPaymentMethod, setIsSavingPaymentMethod] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -49,7 +66,7 @@ export default function AdminBranchesPage() {
     let active = true
     getSupabaseClient()
       .from('branches')
-      .select('id, name, address, map_url, phone, email, is_active, gcash_qr_path, delivery_enabled, delivery_fee')
+      .select('id, name, address, map_url, phone, email, is_active, delivery_enabled, delivery_fee')
       .order('name')
       .then(({ data, error }) => {
         if (error) throw new Error(error.message)
@@ -70,30 +87,41 @@ export default function AdminBranchesPage() {
 
   function openNewBranch() {
     setDraft(emptyBranch)
-    setQrFile(null)
+    setBranchPaymentMethods([])
+    setIsLoadingPaymentMethods(false)
+    setPaymentDraft(emptyPaymentMethod)
+    setPaymentQrFile(null)
     setErrorMessage('')
     setDialogOpen(true)
   }
 
   function openEditBranch(branch) {
     setDraft({ ...branch })
-    setQrFile(null)
+    setPaymentDraft(emptyPaymentMethod)
+    setPaymentQrFile(null)
     setErrorMessage('')
     setDialogOpen(true)
+    setIsLoadingPaymentMethods(true)
+    getSupabaseClient()
+      .from('payment_methods')
+      .select('id, code, name, instructions, settlement_type, is_active, qr_code_path')
+      .eq('branch_id', branch.id)
+      .order('name')
+      .then(({ data, error }) => {
+        if (error) throw new Error(error.message)
+        setBranchPaymentMethods(data)
+      })
+      .catch((error) => {
+        console.error('Unable to load branch payment methods.', error)
+        setErrorMessage(error.message)
+      })
+      .finally(() => setIsLoadingPaymentMethods(false))
   }
 
   async function saveBranch(event) {
     event.preventDefault()
     setErrorMessage('')
     setSuccessMessage('')
-    if (qrFile && qrFile.size > 5 * 1024 * 1024) {
-      setErrorMessage('The branch QR image must be 5 MB or smaller.')
-      return
-    }
-    if (qrFile && !['image/jpeg', 'image/png', 'image/webp'].includes(qrFile.type)) {
-      setErrorMessage('Use a JPG, PNG, or WebP image for the branch QR.')
-      return
-    }
     const deliveryFee = Number(draft.delivery_fee)
     if (!Number.isFinite(deliveryFee) || deliveryFee < 0) {
       setErrorMessage('Enter a valid non-negative delivery fee.')
@@ -130,33 +158,9 @@ export default function AdminBranchesPage() {
     try {
       const supabase = getSupabaseClient()
       const result = draft.id
-        ? await supabase.from('branches').update(payload).eq('id', draft.id).select('id, gcash_qr_path').single()
-        : await supabase.from('branches').insert(payload).select('id, gcash_qr_path').single()
+        ? await supabase.from('branches').update(payload).eq('id', draft.id).select('id').single()
+        : await supabase.from('branches').insert(payload).select('id').single()
       if (result.error) throw new Error(result.error.message)
-      const savedBranch = result.data
-      if (qrFile) {
-        const oldQrPath = savedBranch.gcash_qr_path
-        const qrPath = `branches/${savedBranch.id}/${crypto.randomUUID()}-${qrFile.name.replace(/[^a-zA-Z0-9.-]/g, '-')}`
-        const { error: uploadError } = await supabase.storage
-          .from('branch-payment-qr')
-          .upload(qrPath, qrFile, { contentType: qrFile.type, cacheControl: '3600', upsert: false })
-        if (uploadError) {
-          throw new Error(`Branch details saved, but the QR upload failed: ${uploadError.message}`)
-        }
-        const { error: pathError } = await supabase
-          .from('branches')
-          .update({ gcash_qr_path: qrPath })
-          .eq('id', savedBranch.id)
-        if (pathError) {
-          const { error: cleanupError } = await supabase.storage.from('branch-payment-qr').remove([qrPath])
-          if (cleanupError) console.error('Unable to remove the unlinked branch QR code.', cleanupError)
-          throw new Error(`Branch details saved, but its QR path could not be saved: ${pathError.message}`)
-        }
-        if (oldQrPath) {
-          const { error: deleteError } = await supabase.storage.from('branch-payment-qr').remove([oldQrPath])
-          if (deleteError) console.error('Unable to remove the replaced branch QR code.', deleteError)
-        }
-      }
       setDialogOpen(false)
       setSuccessMessage(draft.id ? 'Branch details updated.' : 'Branch created. You can now assign staff to it.')
       setReloadKey((value) => value + 1)
@@ -166,6 +170,111 @@ export default function AdminBranchesPage() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  async function savePaymentMethod() {
+    if (!draft.id) return
+    const name = paymentDraft.name.trim()
+    if (name.length < 2 || name.length > 80) {
+      setErrorMessage('Enter a payment method name between 2 and 80 characters.')
+      return
+    }
+    if (paymentQrFile && paymentQrFile.size > 5 * 1024 * 1024) {
+      setErrorMessage('The QR image must be 5 MB or smaller.')
+      return
+    }
+    if (paymentQrFile && !['image/jpeg', 'image/png', 'image/webp'].includes(paymentQrFile.type)) {
+      setErrorMessage('Use a JPG, PNG, or WebP image for the payment QR.')
+      return
+    }
+    if (paymentDraft.settlement_type === 'provider' && !paymentQrFile && !paymentDraft.qr_code_path) {
+      setErrorMessage('Upload a QR image for online payment methods.')
+      return
+    }
+
+    setIsSavingPaymentMethod(true)
+    setErrorMessage('')
+    const supabase = getSupabaseClient()
+    const methodCode = paymentDraft.code || name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '') || `payment_${crypto.randomUUID().slice(0, 8)}`
+    let uploadedQrPath = ''
+    let paymentMethodSaved = false
+    try {
+      if (paymentQrFile) {
+        uploadedQrPath = `branches/${draft.id}/payment-methods/${crypto.randomUUID()}-${paymentQrFile.name.replace(/[^a-zA-Z0-9.-]/g, '-')}`
+        const { error } = await supabase.storage
+          .from('branch-payment-qr')
+          .upload(uploadedQrPath, paymentQrFile, {
+            contentType: paymentQrFile.type,
+            cacheControl: '3600',
+            upsert: false,
+          })
+        if (error) throw new Error(`Could not upload the QR image: ${error.message}`)
+      }
+
+      const payload = {
+        branch_id: draft.id,
+        code: methodCode,
+        name,
+        instructions: paymentDraft.instructions.trim(),
+        settlement_type: paymentDraft.settlement_type,
+        provider: paymentDraft.settlement_type === 'provider' ? methodCode : null,
+        is_active: paymentDraft.is_active,
+        qr_code_path: paymentDraft.settlement_type === 'provider'
+          ? uploadedQrPath || paymentDraft.qr_code_path || null
+          : null,
+      }
+      const result = paymentDraft.id
+        ? await supabase.from('payment_methods').update(payload).eq('id', paymentDraft.id)
+        : await supabase.from('payment_methods').insert(payload)
+      if (result.error) throw new Error(result.error.message)
+      paymentMethodSaved = true
+
+      if (paymentDraft.qr_code_path && paymentDraft.qr_code_path !== payload.qr_code_path) {
+        const { error } = await supabase.storage
+          .from('branch-payment-qr')
+          .remove([paymentDraft.qr_code_path])
+        if (error) console.error('Unable to remove the replaced payment QR.', error)
+      }
+      setPaymentDraft(emptyPaymentMethod)
+      setPaymentQrFile(null)
+      const { data, error } = await supabase
+        .from('payment_methods')
+        .select('id, code, name, instructions, settlement_type, is_active, qr_code_path')
+        .eq('branch_id', draft.id)
+        .order('name')
+      if (error) throw new Error(error.message)
+      setBranchPaymentMethods(data)
+    } catch (error) {
+      if (uploadedQrPath && !paymentMethodSaved) {
+        const { error: cleanupError } = await supabase.storage
+          .from('branch-payment-qr')
+          .remove([uploadedQrPath])
+        if (cleanupError) console.error('Unable to remove the unlinked payment QR.', cleanupError)
+      }
+      console.error('Unable to save branch payment method.', error)
+      setErrorMessage(error.message)
+    } finally {
+      setIsSavingPaymentMethod(false)
+    }
+  }
+
+  async function deactivatePaymentMethod(method) {
+    setErrorMessage('')
+    const { error } = await getSupabaseClient()
+      .from('payment_methods')
+      .update({ is_active: false })
+      .eq('id', method.id)
+    if (error) {
+      console.error('Unable to deactivate branch payment method.', error)
+      setErrorMessage(error.message)
+      return
+    }
+    setBranchPaymentMethods((current) => current.map((item) =>
+      item.id === method.id ? { ...item, is_active: false } : item,
+    ))
   }
 
   async function toggleBranch(branch, isActive) {
@@ -216,14 +325,6 @@ export default function AdminBranchesPage() {
                             : 'Free'
                           : 'Off'}
                       </Typography>
-                      {branch.gcash_qr_path && (
-                        <Box
-                          component="img"
-                          src={getSupabaseClient().storage.from('branch-payment-qr').getPublicUrl(branch.gcash_qr_path).data.publicUrl}
-                          alt={`${branch.name} GCash QR`}
-                          sx={{ width: 144, height: 144, objectFit: 'contain', border: 1, borderColor: 'divider', borderRadius: 1, p: 1 }}
-                        />
-                      )}
                     </Box>
                     <Button size="small" startIcon={<EditIcon />} onClick={() => openEditBranch(branch)}>Edit</Button>
                   </Stack>
@@ -242,7 +343,7 @@ export default function AdminBranchesPage() {
           <Alert severity="info">No branches have been created. Add the first branch to configure locations and staff access.</Alert>
         )}
       </Stack>
-      <Dialog open={dialogOpen} onClose={() => !isSaving && setDialogOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={dialogOpen} onClose={() => !isSaving && !isSavingPaymentMethod && setDialogOpen(false)} fullWidth maxWidth="md">
         <Box component="form" onSubmit={saveBranch}>
           <DialogTitle>{draft.id ? 'Edit branch' : 'Add branch'}</DialogTitle>
           <DialogContent>
@@ -263,26 +364,6 @@ export default function AdminBranchesPage() {
                 <TextField fullWidth label="Phone (optional)" value={draft.phone || ''} onChange={(event) => setDraft((current) => ({ ...current, phone: event.target.value }))} slotProps={{ htmlInput: { maxLength: 40 } }} />
                 <TextField fullWidth label="Email (optional)" type="email" value={draft.email || ''} onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))} slotProps={{ htmlInput: { maxLength: 254 } }} />
               </Stack>
-              <Button
-                component="label"
-                variant="outlined"
-                sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}
-              >
-                {qrFile?.name || (draft.gcash_qr_path ? 'Replace GCash QR code' : 'Upload GCash QR code (optional)')}
-                <input
-                  hidden
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    if (file) setQrFile(file)
-                    event.target.value = ''
-                  }}
-                />
-              </Button>
-              <Typography variant="caption" color="text.secondary">
-                Customers see this branch’s QR during GCash checkout. Use a clear JPG, PNG, or WebP image up to 5 MB.
-              </Typography>
               <FormControlLabel control={<Switch checked={draft.is_active} onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))} />} label="Accepting orders" />
               <FormControlLabel
                 control={<Switch checked={Boolean(draft.delivery_enabled)} onChange={(event) => setDraft((current) => ({ ...current, delivery_enabled: event.target.checked }))} />}
@@ -297,10 +378,178 @@ export default function AdminBranchesPage() {
                 slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
                 helperText="Set to 0 for free delivery. Delivery is off for new branches until enabled."
               />
+              {draft.id && (
+                <Stack spacing={2} sx={{ pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                  <Box>
+                    <Typography variant="h6">Payment methods</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Choose which payment options customers can use at this branch. Online methods need their own QR code.
+                    </Typography>
+                  </Box>
+                  {isLoadingPaymentMethods ? (
+                    <CircularProgress size={24} />
+                  ) : (
+                    <Stack spacing={1}>
+                      {branchPaymentMethods.map((method) => (
+                        <Paper key={method.id} variant="outlined" sx={{ p: 1.5 }}>
+                          <Stack
+                            direction={{ xs: 'column', sm: 'row' }}
+                            spacing={1.5}
+                            sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
+                          >
+                            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+                              {method.qr_code_path && (
+                                <Box
+                                  component="img"
+                                  src={getSupabaseClient().storage.from('branch-payment-qr').getPublicUrl(method.qr_code_path).data.publicUrl}
+                                  alt={`${method.name} QR`}
+                                  sx={{ width: 56, height: 56, objectFit: 'contain' }}
+                                />
+                              )}
+                              <Box>
+                                <Typography fontWeight={700}>{method.name}</Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {method.settlement_type === 'provider' ? 'Online QR' : 'Pay at branch'}
+                                  {' · '}{method.is_active ? 'Enabled' : 'Disabled'}
+                                </Typography>
+                              </Box>
+                            </Stack>
+                            <Stack direction="row" spacing={1}>
+                              <Button
+                                type="button"
+                                size="small"
+                                onClick={() => {
+                                  setPaymentDraft({ ...method })
+                                  setPaymentQrFile(null)
+                                  setErrorMessage('')
+                                }}
+                              >
+                                Edit
+                              </Button>
+                              {method.is_active && (
+                                <Button
+                                  type="button"
+                                  size="small"
+                                  color="error"
+                                  onClick={() => void deactivatePaymentMethod(method)}
+                                >
+                                  Deactivate
+                                </Button>
+                              )}
+                            </Stack>
+                          </Stack>
+                        </Paper>
+                      ))}
+                      {!branchPaymentMethods.length && (
+                        <Alert severity="info">No payment methods are configured for this branch yet.</Alert>
+                      )}
+                    </Stack>
+                  )}
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    {paymentDraft.id ? `Edit ${paymentDraft.name}` : 'Add payment method'}
+                  </Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <TextField
+                      fullWidth
+                      label="Payment method name"
+                      value={paymentDraft.name}
+                      onChange={(event) => setPaymentDraft((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="e.g. GCash, Cash, MariBank, BDO"
+                      slotProps={{ htmlInput: { maxLength: 80 } }}
+                    />
+                    <FormControl fullWidth>
+                      <InputLabel id="payment-settlement-label">Payment type</InputLabel>
+                      <Select
+                        labelId="payment-settlement-label"
+                        label="Payment type"
+                        value={paymentDraft.settlement_type}
+                        onChange={(event) => setPaymentDraft((current) => ({
+                          ...current,
+                          settlement_type: event.target.value,
+                        }))}
+                      >
+                        <MenuItem value="pay_at_branch">Cash / pay at branch</MenuItem>
+                        <MenuItem value="provider">Online QR payment</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Stack>
+                  <TextField
+                    label="Customer instructions (optional)"
+                    value={paymentDraft.instructions}
+                    onChange={(event) => setPaymentDraft((current) => ({
+                      ...current,
+                      instructions: event.target.value,
+                    }))}
+                    multiline
+                    minRows={2}
+                    slotProps={{ htmlInput: { maxLength: 500 } }}
+                  />
+                  {paymentDraft.settlement_type === 'provider' && (
+                    <>
+                      <Button
+                        type="button"
+                        component="label"
+                        variant="outlined"
+                        sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', alignSelf: 'flex-start' }}
+                      >
+                        {paymentQrFile?.name || (
+                          paymentDraft.qr_code_path ? 'Replace QR code' : 'Upload QR code'
+                        )}
+                        <input
+                          hidden
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          onChange={(event) => {
+                            setPaymentQrFile(event.target.files?.[0] || null)
+                            event.target.value = ''
+                          }}
+                        />
+                      </Button>
+                      <Typography variant="caption" color="text.secondary">
+                        JPG, PNG, or WebP · up to 5 MB. Customers upload a payment receipt and reference; branch staff verify before marking it paid.
+                      </Typography>
+                    </>
+                  )}
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={paymentDraft.is_active}
+                        onChange={(event) => setPaymentDraft((current) => ({
+                          ...current,
+                          is_active: event.target.checked,
+                        }))}
+                      />
+                    }
+                    label="Available to customers"
+                  />
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      type="button"
+                      variant="contained"
+                      onClick={() => void savePaymentMethod()}
+                      disabled={isSavingPaymentMethod || isLoadingPaymentMethods}
+                    >
+                      {isSavingPaymentMethod ? 'Saving…' : paymentDraft.id ? 'Save payment method' : 'Add payment method'}
+                    </Button>
+                    {paymentDraft.id && (
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setPaymentDraft(emptyPaymentMethod)
+                          setPaymentQrFile(null)
+                          setErrorMessage('')
+                        }}
+                      >
+                        Cancel edit
+                      </Button>
+                    )}
+                  </Stack>
+                </Stack>
+              )}
             </Stack>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setDialogOpen(false)} disabled={isSaving}>Cancel</Button>
+            <Button onClick={() => setDialogOpen(false)} disabled={isSaving || isSavingPaymentMethod}>Cancel</Button>
             <Button type="submit" variant="contained" disabled={isSaving}>{isSaving ? 'Saving…' : draft.id ? 'Save branch' : 'Create branch'}</Button>
           </DialogActions>
         </Box>

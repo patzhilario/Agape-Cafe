@@ -47,6 +47,142 @@ export async function getAllOperationalReport(branchId, startDate, endDate) {
   }
 }
 
+export async function getReportPaymentMethods() {
+  const methods = unwrap(
+    await getSupabaseClient()
+      .from('payment_methods')
+      .select('code, name')
+      .eq('is_active', true)
+      .order('name'),
+    'Could not load payment methods',
+  )
+  return [...new Map(methods.map((method) => [method.code, method])).values()]
+}
+
+export async function getPaymentTransactions(
+  branchId,
+  paymentMethodCode,
+  startDate,
+  endDate,
+  page = 0,
+  pageSize = 50,
+) {
+  return unwrap(
+    await getSupabaseClient().rpc('get_report_payment_transactions', {
+      target_branch_id: branchId || null,
+      target_payment_method_code: paymentMethodCode || null,
+      start_date: startDate,
+      end_date: endDate,
+      page_offset: page * pageSize,
+      page_size: pageSize,
+    }),
+    'Could not load report transactions',
+  )
+}
+
+export async function getAllPaymentTransactions(branchId, paymentMethodCode, startDate, endDate) {
+  const pageSize = 250
+  const transactions = []
+  for (let page = 0; ; page += 1) {
+    const nextTransactions = await getPaymentTransactions(
+      branchId,
+      paymentMethodCode,
+      startDate,
+      endDate,
+      page,
+      pageSize,
+    )
+    transactions.push(...nextTransactions)
+    if (nextTransactions.length < pageSize) return transactions
+    if (transactions.length >= 10000) {
+      const overflow = await getPaymentTransactions(
+        branchId,
+        paymentMethodCode,
+        startDate,
+        endDate,
+        page + 1,
+        pageSize,
+      )
+      if (overflow.length) {
+        throw new Error('Payment report is limited to 10,000 transactions. Narrow the date range.')
+      }
+      return transactions
+    }
+  }
+}
+
+export async function getProductSalesReport(
+  branchId,
+  startDate,
+  endDate,
+  grouping,
+  page = 0,
+  pageSize = 50,
+) {
+  return unwrap(
+    await getSupabaseClient().rpc('get_product_sales_report', {
+      target_branch_id: branchId || null,
+      start_date: startDate,
+      end_date: endDate,
+      target_grouping: grouping,
+      page_offset: page * pageSize,
+      page_size: pageSize,
+    }),
+    'Could not load product sales report',
+  )
+}
+
+export async function getAllProductSalesReport(branchId, startDate, endDate, grouping) {
+  const pageSize = 250
+  const rows = []
+  for (let page = 0; ; page += 1) {
+    const nextRows = await getProductSalesReport(
+      branchId,
+      startDate,
+      endDate,
+      grouping,
+      page,
+      pageSize,
+    )
+    rows.push(...nextRows)
+    if (nextRows.length < pageSize) return rows
+    if (rows.length >= 10000) {
+      const overflow = await getProductSalesReport(
+        branchId,
+        startDate,
+        endDate,
+        grouping,
+        page + 1,
+        pageSize,
+      )
+      if (overflow.length) {
+        throw new Error('Product sales export is limited to 10,000 rows. Narrow the date range or change grouping.')
+      }
+      return rows
+    }
+  }
+}
+
+export async function getPaymentRefundHistory(paymentId) {
+  return unwrap(
+    await getSupabaseClient().rpc('get_payment_refund_history', {
+      target_payment_id: paymentId,
+    }),
+    'Could not load refund history',
+  )
+}
+
+export async function recordPaymentRefund(paymentId, amount, note) {
+  return unwrap(
+    await getSupabaseClient().rpc('record_payment_refund', {
+      target_payment_id: paymentId,
+      target_amount: Number(amount),
+      target_note: note,
+    }),
+    'Could not save refund record',
+  )
+}
+
 export async function getFinancialReport(branchId, startDate, endDate) {
   const rows = unwrap(
     await getSupabaseClient().rpc('get_financial_report_with_payments', {

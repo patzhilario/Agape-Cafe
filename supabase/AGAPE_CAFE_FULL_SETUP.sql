@@ -6573,3 +6573,1080 @@ using (
   public.can_access_branch(branch_id)
   and public.has_permission(branch_id, 'menu', 'view')
 );
+
+-- ============================================================================
+-- Migration: 20261021140000_payment_method_report.sql
+-- ============================================================================
+create function public.get_payment_method_transactions(
+  target_branch_id uuid,
+  start_date date,
+  end_date date,
+  page_offset integer default 0,
+  page_size integer default 250
+)
+returns table (
+  payment_id uuid,
+  branch_id uuid,
+  branch_name text,
+  order_id uuid,
+  order_number text,
+  customer_name text,
+  order_status public.order_status,
+  fulfillment_method public.order_fulfillment_method,
+  subtotal numeric,
+  discount_total numeric,
+  total numeric,
+  items jsonb,
+  payment_method_code text,
+  payment_method_name text,
+  amount numeric,
+  status public.payment_status,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.is_active_account() then
+    raise exception 'An active account is required to view payment reports.'
+      using errcode = '42501';
+  end if;
+  if start_date is null or end_date is null or end_date < start_date
+      or end_date - start_date > 365 then
+    raise exception 'Choose a valid report period of no more than 366 days.';
+  end if;
+  if page_offset is null or page_offset < 0 or page_offset > 1000000
+      or page_size is null or page_size < 1 or page_size > 250 then
+    raise exception 'Report pagination values are invalid.';
+  end if;
+  if target_branch_id is null then
+    if not public.has_role('super_admin') then
+      raise exception 'Only a Super Admin can run an all-branch payment report.'
+        using errcode = '42501';
+    end if;
+  elsif not public.can_access_branch(target_branch_id)
+      or not public.has_permission(target_branch_id, 'financials', 'view')
+      or not public.has_permission(target_branch_id, 'reports', 'view') then
+    raise exception 'You do not have permission to view payments for this branch.'
+      using errcode = '42501';
+  end if;
+
+  if (
+    select count(*)
+    from public.payments as payment
+    join public.orders as order_record on order_record.id = payment.order_id
+    where payment.status in ('paid', 'refunded', 'partially_refunded')
+      and payment.updated_at >= (start_date::timestamp at time zone 'Asia/Manila')
+      and payment.updated_at < ((end_date + 1)::timestamp at time zone 'Asia/Manila')
+      and (target_branch_id is null or order_record.branch_id = target_branch_id)
+  ) > 10000 then
+    raise exception 'This report contains more than 10,000 payment transactions. Narrow the date range.';
+  end if;
+
+  return query
+  select payment.id,
+         branch.id,
+         branch.name,
+         order_record.id,
+         order_record.order_number,
+         order_record.customer_name,
+         order_record.status,
+         order_record.fulfillment_method,
+         order_record.subtotal,
+         order_record.discount_total,
+         order_record.total,
+         coalesce((
+           select jsonb_agg(jsonb_build_object(
+             'product_name', order_item.product_name,
+             'variant_name', order_item.variant_name,
+             'quantity', order_item.quantity,
+             'line_total', order_item.line_total
+           ) order by order_item.created_at, order_item.id)
+           from public.order_items as order_item
+           where order_item.order_id = order_record.id
+         ), '[]'::jsonb),
+         payment.payment_method_code,
+         payment.payment_method_name,
+         payment.amount,
+         payment.status,
+         payment.created_at,
+         payment.updated_at
+  from public.payments as payment
+  join public.orders as order_record on order_record.id = payment.order_id
+  join public.branches as branch on branch.id = order_record.branch_id
+  where payment.status in ('paid', 'refunded', 'partially_refunded')
+    and payment.updated_at >= (start_date::timestamp at time zone 'Asia/Manila')
+    and payment.updated_at < ((end_date + 1)::timestamp at time zone 'Asia/Manila')
+    and (target_branch_id is null or order_record.branch_id = target_branch_id)
+  order by payment.updated_at desc, payment.id desc
+  limit page_size
+  offset page_offset;
+end;
+$$;
+
+revoke all on function public.get_payment_method_transactions(uuid, date, date, integer, integer)
+  from public, anon, authenticated;
+grant execute on function public.get_payment_method_transactions(uuid, date, date, integer, integer)
+  to authenticated;
+
+notify pgrst, 'reload schema';
+
+-- ============================================================================
+-- Migration: 20261021150000_payment_refund_tracking.sql
+-- ============================================================================
+create table public.payment_refunds (
+  id uuid primary key default gen_random_uuid(),
+  payment_id uuid not null references public.payments(id) on delete restrict,
+  amount numeric(12, 2) not null check (amount > 0),
+  note text not null check (length(btrim(note)) between 3 and 500),
+  created_by uuid not null references public.profiles(id) on delete restrict,
+  created_at timestamptz not null default now()
+);
+
+create index payment_refunds_payment_created_idx
+  on public.payment_refunds(payment_id, created_at desc, id desc);
+
+alter table public.payment_refunds enable row level security;
+revoke all on public.payment_refunds from public, anon, authenticated;
+
+create function public.get_report_payment_transactions(
+  target_branch_id uuid,
+  target_payment_method_code text,
+  start_date date,
+  end_date date,
+  page_offset integer default 0,
+  page_size integer default 50
+)
+returns table (
+  payment_id uuid,
+  branch_id uuid,
+  branch_name text,
+  order_id uuid,
+  order_number text,
+  customer_name text,
+  order_status public.order_status,
+  fulfillment_method public.order_fulfillment_method,
+  subtotal numeric,
+  discount_total numeric,
+  total numeric,
+  items jsonb,
+  payment_method_code text,
+  payment_method_name text,
+  amount numeric,
+  status public.payment_status,
+  created_at timestamptz,
+  updated_at timestamptz,
+  refund_count bigint,
+  refund_amount numeric
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.is_active_account() then
+    raise exception 'An active account is required to view payment reports.'
+      using errcode = '42501';
+  end if;
+  if start_date is null or end_date is null or end_date < start_date
+      or end_date - start_date > 365 then
+    raise exception 'Choose a valid report period of no more than 366 days.';
+  end if;
+  if page_offset is null or page_offset < 0 or page_offset > 1000000
+      or page_size is null or page_size < 1 or page_size > 250 then
+    raise exception 'Report pagination values are invalid.';
+  end if;
+  if target_branch_id is null then
+    if not public.has_role('super_admin') then
+      raise exception 'Only a Super Admin can run an all-branch payment report.'
+        using errcode = '42501';
+    end if;
+  elsif not public.can_access_branch(target_branch_id)
+      or not public.has_permission(target_branch_id, 'financials', 'view')
+      or not public.has_permission(target_branch_id, 'reports', 'view') then
+    raise exception 'You do not have permission to view payments for this branch.'
+      using errcode = '42501';
+  end if;
+
+  return query
+  select payment.id,
+         branch.id,
+         branch.name,
+         order_record.id,
+         order_record.order_number,
+         order_record.customer_name,
+         order_record.status,
+         order_record.fulfillment_method,
+         order_record.subtotal,
+         order_record.discount_total,
+         order_record.total,
+         coalesce((
+           select jsonb_agg(jsonb_build_object(
+             'product_name', order_item.product_name,
+             'variant_name', order_item.variant_name,
+             'quantity', order_item.quantity,
+             'line_total', order_item.line_total
+           ) order by order_item.created_at, order_item.id)
+           from public.order_items as order_item
+           where order_item.order_id = order_record.id
+         ), '[]'::jsonb),
+         payment.payment_method_code,
+         payment.payment_method_name,
+         payment.amount,
+         payment.status,
+         payment.created_at,
+         payment.updated_at,
+         refund_totals.refund_count,
+         refund_totals.refund_amount
+  from public.payments as payment
+  join public.orders as order_record on order_record.id = payment.order_id
+  join public.branches as branch on branch.id = order_record.branch_id
+  cross join lateral (
+    select count(*)::bigint as refund_count,
+           coalesce(sum(refund.amount), 0)::numeric as refund_amount
+    from public.payment_refunds as refund
+    where refund.payment_id = payment.id
+  ) as refund_totals
+  where payment.status in ('paid', 'refunded', 'partially_refunded')
+    and payment.updated_at >= (start_date::timestamp at time zone 'Asia/Manila')
+    and payment.updated_at < ((end_date + 1)::timestamp at time zone 'Asia/Manila')
+    and (target_branch_id is null or order_record.branch_id = target_branch_id)
+    and (
+      target_payment_method_code is null
+      or payment.payment_method_code = target_payment_method_code
+    )
+  order by payment.updated_at desc, payment.id desc
+  limit page_size
+  offset page_offset;
+end;
+$$;
+
+create function public.get_payment_refund_history(target_payment_id uuid)
+returns table (
+  refund_id uuid,
+  amount numeric,
+  note text,
+  created_at timestamptz,
+  created_by_name text
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  payment_branch_id uuid;
+begin
+  if not public.is_active_account() then
+    raise exception 'An active account is required to view refund history.'
+      using errcode = '42501';
+  end if;
+
+  select order_record.branch_id into payment_branch_id
+  from public.payments as payment
+  join public.orders as order_record on order_record.id = payment.order_id
+  where payment.id = target_payment_id;
+  if not found then raise exception 'Payment transaction not found.'; end if;
+
+  if not public.can_access_branch(payment_branch_id)
+      or not public.has_permission(payment_branch_id, 'financials', 'view')
+      or not public.has_permission(payment_branch_id, 'reports', 'view') then
+    raise exception 'You do not have permission to view refund history for this branch.'
+      using errcode = '42501';
+  end if;
+
+  return query
+  select refund.id,
+         refund.amount,
+         refund.note,
+         refund.created_at,
+         profile.display_name
+  from public.payment_refunds as refund
+  join public.profiles as profile on profile.id = refund.created_by
+  where refund.payment_id = target_payment_id
+  order by refund.created_at desc, refund.id desc;
+end;
+$$;
+
+create function public.record_payment_refund(
+  target_payment_id uuid,
+  target_amount numeric,
+  target_note text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_payment public.payments%rowtype;
+  current_branch_id uuid;
+  refunded_amount numeric;
+  refund_id uuid;
+begin
+  if not public.is_active_account() then
+    raise exception 'An active account is required to record a refund.'
+      using errcode = '42501';
+  end if;
+
+  select payment.* into current_payment
+  from public.payments as payment
+  where payment.id = target_payment_id
+  for update;
+  if not found then raise exception 'Payment transaction not found.'; end if;
+
+  select order_record.branch_id into current_branch_id
+  from public.orders as order_record
+  where order_record.id = current_payment.order_id;
+
+  if not public.can_access_branch(current_branch_id)
+      or not public.has_permission(current_branch_id, 'financials', 'edit')
+      or not public.has_permission(current_branch_id, 'reports', 'view') then
+    raise exception 'You do not have permission to record refunds for this branch.'
+      using errcode = '42501';
+  end if;
+  if current_payment.status not in ('paid', 'partially_refunded') then
+    raise exception 'Only paid transactions can be refunded.';
+  end if;
+  if target_amount is null or target_amount <= 0 or target_amount > current_payment.amount then
+    raise exception 'Enter a refund amount greater than zero and no more than the payment amount.';
+  end if;
+  if target_note is null or length(btrim(target_note)) not between 3 and 500 then
+    raise exception 'Enter a refund note between 3 and 500 characters.';
+  end if;
+
+  select coalesce(sum(refund.amount), 0) into refunded_amount
+  from public.payment_refunds as refund
+  where refund.payment_id = target_payment_id;
+  if refunded_amount + target_amount > current_payment.amount then
+    raise exception 'The refund amount exceeds the remaining refundable balance.';
+  end if;
+
+  insert into public.payment_refunds (
+    payment_id, amount, note, created_by
+  )
+  values (
+    target_payment_id, target_amount, btrim(target_note), (select auth.uid())
+  )
+  returning id into refund_id;
+
+  insert into public.audit_logs (
+    actor_id, action, record_type, record_id, branch_id, details
+  )
+  values (
+    (select auth.uid()),
+    'payment_refund_recorded',
+    'payment',
+    target_payment_id,
+    current_branch_id,
+    jsonb_build_object(
+      'refund_id', refund_id,
+      'amount', target_amount,
+      'note', btrim(target_note)
+    )
+  );
+
+  return refund_id;
+end;
+$$;
+
+revoke all on function public.get_report_payment_transactions(uuid, text, date, date, integer, integer)
+  from public, anon, authenticated;
+grant execute on function public.get_report_payment_transactions(uuid, text, date, date, integer, integer)
+  to authenticated;
+revoke all on function public.get_payment_refund_history(uuid)
+  from public, anon, authenticated;
+grant execute on function public.get_payment_refund_history(uuid)
+  to authenticated;
+revoke all on function public.record_payment_refund(uuid, numeric, text)
+  from public, anon, authenticated;
+grant execute on function public.record_payment_refund(uuid, numeric, text)
+  to authenticated;
+
+notify pgrst, 'reload schema';
+
+-- ============================================================================
+-- Migration: 20261021160000_product_sales_report.sql
+-- ============================================================================
+create function public.get_product_sales_report(
+  target_branch_id uuid,
+  start_date date,
+  end_date date,
+  target_grouping text,
+  page_offset integer default 0,
+  page_size integer default 50
+)
+returns table (
+  period_start date,
+  product_id uuid,
+  product_name text,
+  category_name text,
+  units_sold bigint,
+  order_count bigint,
+  gross_sales numeric,
+  net_sales numeric
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.is_active_account() then
+    raise exception 'An active account is required to view product sales reports.'
+      using errcode = '42501';
+  end if;
+  if start_date is null or end_date is null or end_date < start_date
+      or end_date - start_date > 3650 then
+    raise exception 'Choose a valid product sales period of no more than 10 years.';
+  end if;
+  if target_grouping is null or target_grouping not in ('day', 'month', 'year') then
+    raise exception 'Choose day, month, or year grouping.';
+  end if;
+  if page_offset is null or page_offset < 0 or page_offset > 1000000
+      or page_size is null or page_size < 1 or page_size > 250 then
+    raise exception 'Report pagination values are invalid.';
+  end if;
+  if target_branch_id is null then
+    if not public.has_role('super_admin') then
+      raise exception 'Only a Super Admin can run an all-branch product sales report.'
+        using errcode = '42501';
+    end if;
+  elsif not public.can_access_branch(target_branch_id)
+      or not public.has_permission(target_branch_id, 'reports', 'view') then
+    raise exception 'You do not have permission to view product sales for this branch.'
+      using errcode = '42501';
+  end if;
+
+  if (
+    select count(*)
+    from (
+      select date_trunc(
+               target_grouping,
+               order_record.created_at at time zone 'Asia/Manila'
+             )::date as period_start,
+             item.product_id,
+             item.product_name,
+             coalesce(category.name, 'Uncategorized') as category_name
+      from public.orders as order_record
+      join public.order_items as item on item.order_id = order_record.id
+      left join public.products as product on product.id = item.product_id
+      left join public.categories as category on category.id = product.category_id
+      where order_record.status = 'completed'
+        and order_record.created_at >= (start_date::timestamp at time zone 'Asia/Manila')
+        and order_record.created_at < ((end_date + 1)::timestamp at time zone 'Asia/Manila')
+        and (target_branch_id is null or order_record.branch_id = target_branch_id)
+      group by 1, 2, 3, 4
+    ) as grouped_sales
+  ) > 10000 then
+    raise exception 'This report contains more than 10,000 product rows. Narrow the date range or change grouping.';
+  end if;
+
+  return query
+  select date_trunc(
+           target_grouping,
+           order_record.created_at at time zone 'Asia/Manila'
+         )::date,
+         item.product_id,
+         item.product_name,
+         coalesce(category.name, 'Uncategorized'),
+         sum(item.quantity)::bigint,
+         count(distinct order_record.id)::bigint,
+         coalesce(sum(item.line_subtotal), 0)::numeric,
+         coalesce(sum(item.line_total), 0)::numeric
+  from public.orders as order_record
+  join public.order_items as item on item.order_id = order_record.id
+  left join public.products as product on product.id = item.product_id
+  left join public.categories as category on category.id = product.category_id
+  where order_record.status = 'completed'
+    and order_record.created_at >= (start_date::timestamp at time zone 'Asia/Manila')
+    and order_record.created_at < ((end_date + 1)::timestamp at time zone 'Asia/Manila')
+    and (target_branch_id is null or order_record.branch_id = target_branch_id)
+  group by 1, 2, 3, 4
+  order by 1 desc, 5 desc, 3
+  limit page_size
+  offset page_offset;
+end;
+$$;
+
+revoke all on function public.get_product_sales_report(uuid, date, date, text, integer, integer)
+  from public, anon, authenticated;
+grant execute on function public.get_product_sales_report(uuid, date, date, text, integer, integer)
+  to authenticated;
+
+notify pgrst, 'reload schema';
+
+-- ============================================================================
+-- Migration: 20261021170000_payment_reports_by_order_date.sql
+-- ============================================================================
+drop function public.get_report_payment_transactions(uuid, text, date, date, integer, integer);
+
+create function public.get_report_payment_transactions(
+  target_branch_id uuid,
+  target_payment_method_code text,
+  start_date date,
+  end_date date,
+  page_offset integer default 0,
+  page_size integer default 50
+)
+returns table (
+  payment_id uuid,
+  branch_id uuid,
+  branch_name text,
+  order_id uuid,
+  order_number text,
+  customer_name text,
+  order_status public.order_status,
+  fulfillment_method public.order_fulfillment_method,
+  subtotal numeric,
+  discount_total numeric,
+  total numeric,
+  items jsonb,
+  payment_method_code text,
+  payment_method_name text,
+  amount numeric,
+  status public.payment_status,
+  created_at timestamptz,
+  updated_at timestamptz,
+  refund_count bigint,
+  refund_amount numeric,
+  order_created_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.is_active_account() then
+    raise exception 'An active account is required to view payment reports.'
+      using errcode = '42501';
+  end if;
+  if start_date is null or end_date is null or end_date < start_date
+      or end_date - start_date > 365 then
+    raise exception 'Choose a valid report period of no more than 366 days.';
+  end if;
+  if page_offset is null or page_offset < 0 or page_offset > 1000000
+      or page_size is null or page_size < 1 or page_size > 250 then
+    raise exception 'Report pagination values are invalid.';
+  end if;
+  if target_branch_id is null then
+    if not public.has_role('super_admin') then
+      raise exception 'Only a Super Admin can run an all-branch payment report.'
+        using errcode = '42501';
+    end if;
+  elsif not public.can_access_branch(target_branch_id)
+      or not public.has_permission(target_branch_id, 'financials', 'view')
+      or not public.has_permission(target_branch_id, 'reports', 'view') then
+    raise exception 'You do not have permission to view payments for this branch.'
+      using errcode = '42501';
+  end if;
+
+  return query
+  select payment.id,
+         branch.id,
+         branch.name,
+         order_record.id,
+         order_record.order_number,
+         order_record.customer_name,
+         order_record.status,
+         order_record.fulfillment_method,
+         order_record.subtotal,
+         order_record.discount_total,
+         order_record.total,
+         coalesce((
+           select jsonb_agg(jsonb_build_object(
+             'product_name', order_item.product_name,
+             'variant_name', order_item.variant_name,
+             'quantity', order_item.quantity,
+             'line_total', order_item.line_total
+           ) order by order_item.created_at, order_item.id)
+           from public.order_items as order_item
+           where order_item.order_id = order_record.id
+         ), '[]'::jsonb),
+         payment.payment_method_code,
+         payment.payment_method_name,
+         payment.amount,
+         payment.status,
+         payment.created_at,
+         payment.updated_at,
+         refund_totals.refund_count,
+         refund_totals.refund_amount,
+         order_record.created_at
+  from public.payments as payment
+  join public.orders as order_record on order_record.id = payment.order_id
+  join public.branches as branch on branch.id = order_record.branch_id
+  cross join lateral (
+    select count(*)::bigint as refund_count,
+           coalesce(sum(refund.amount), 0)::numeric as refund_amount
+    from public.payment_refunds as refund
+    where refund.payment_id = payment.id
+  ) as refund_totals
+  where payment.status in ('paid', 'refunded', 'partially_refunded')
+    and order_record.created_at >= (start_date::timestamp at time zone 'Asia/Manila')
+    and order_record.created_at < ((end_date + 1)::timestamp at time zone 'Asia/Manila')
+    and (target_branch_id is null or order_record.branch_id = target_branch_id)
+    and (
+      target_payment_method_code is null
+      or payment.payment_method_code = target_payment_method_code
+    )
+  order by order_record.created_at desc, payment.id desc
+  limit page_size
+  offset page_offset;
+end;
+$$;
+
+revoke all on function public.get_report_payment_transactions(uuid, text, date, date, integer, integer)
+  from public, anon, authenticated;
+grant execute on function public.get_report_payment_transactions(uuid, text, date, date, integer, integer)
+  to authenticated;
+
+notify pgrst, 'reload schema';
+
+
+-- Migration 30: branch-specific payment methods
+alter table public.payment_methods
+  add column branch_id uuid references public.branches(id) on delete cascade,
+  add column qr_code_path text;
+
+alter table public.payment_methods
+  drop constraint if exists payment_methods_code_key;
+
+create unique index payment_methods_branch_code_key
+  on public.payment_methods(branch_id, code)
+  where branch_id is not null;
+
+insert into public.payment_methods (
+  branch_id,
+  code,
+  name,
+  instructions,
+  settlement_type,
+  provider,
+  is_active,
+  qr_code_path
+)
+select branch.id,
+       method.code,
+       case when method.code = 'cash_at_branch' then 'Cash' else method.name end,
+       case when method.code = 'cash_at_branch'
+         then 'Pay cash at this branch. Staff will record the payment.'
+         else method.instructions
+       end,
+       method.settlement_type,
+       method.provider,
+       method.is_active and (
+         method.settlement_type = 'pay_at_branch'
+         or branch.gcash_qr_path is not null
+       ),
+       case when method.code = 'gcash' then branch.gcash_qr_path else null end
+from public.branches as branch
+cross join public.payment_methods as method
+where method.branch_id is null
+  and method.code in ('cash_at_branch', 'gcash')
+on conflict (branch_id, code) where branch_id is not null
+do update set
+  name = excluded.name,
+  instructions = excluded.instructions,
+  settlement_type = excluded.settlement_type,
+  provider = excluded.provider,
+  is_active = excluded.is_active,
+  qr_code_path = excluded.qr_code_path;
+
+update public.payment_methods
+set is_active = false
+where branch_id is null;
+
+drop policy if exists "Anyone can view active payment methods" on public.payment_methods;
+create policy "Anyone can view active branch payment methods"
+on public.payment_methods for select to anon, authenticated
+using (
+  (is_active and branch_id is not null and exists (
+    select 1 from public.branches as branch
+    where branch.id = payment_methods.branch_id and branch.is_active
+  ))
+  or exists (
+    select 1
+    from public.payments as payment
+    join public.orders as order_record on order_record.id = payment.order_id
+    where payment.payment_method_id = payment_methods.id
+      and (
+        order_record.customer_id = (select auth.uid())
+        or (
+          public.can_access_branch(order_record.branch_id)
+          and public.has_permission(order_record.branch_id, 'orders', 'view')
+        )
+      )
+  )
+  or public.has_role('super_admin')
+);
+
+create or replace function public.enforce_fulfillment_payment_method()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  order_fulfillment public.order_fulfillment_method;
+  order_branch_id uuid;
+  method_branch_id uuid;
+  method_settlement_type text;
+  method_is_active boolean;
+  method_qr_path text;
+begin
+  select order_record.fulfillment_method, order_record.branch_id
+  into order_fulfillment, order_branch_id
+  from public.orders as order_record
+  where order_record.id = new.order_id;
+
+  if not found then
+    raise exception 'Payment must belong to an existing order.';
+  end if;
+
+  select payment_method.branch_id,
+         payment_method.settlement_type,
+         payment_method.is_active,
+         payment_method.qr_code_path
+  into method_branch_id,
+       method_settlement_type,
+       method_is_active,
+       method_qr_path
+  from public.payment_methods as payment_method
+  where payment_method.id = new.payment_method_id;
+
+  if not found
+      or method_branch_id is distinct from order_branch_id
+      or not method_is_active then
+    raise exception 'Choose an active payment method configured for this branch.';
+  end if;
+
+  if order_fulfillment = 'delivery'
+      and (method_settlement_type <> 'provider' or method_qr_path is null) then
+    raise exception 'Delivery orders require an enabled online QR payment method.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists payments_enforce_fulfillment_method on public.payments;
+create trigger payments_enforce_fulfillment_method
+before insert or update of payment_method_id, payment_method_code on public.payments
+for each row execute function public.enforce_fulfillment_payment_method();
+
+create or replace function public.guard_gcash_payment_verification()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status = 'paid'
+      and old.status is distinct from new.status
+      and exists (
+        select 1
+        from public.payment_methods as method
+        where method.id = new.payment_method_id
+          and method.settlement_type = 'provider'
+      )
+      and not exists (
+        select 1
+        from public.payment_manual_override_authorizations as override_auth
+        where override_auth.transaction_id = pg_catalog.txid_current()
+          and override_auth.order_id = new.order_id
+          and override_auth.actor_id = (select auth.uid())
+      )
+      and not exists (
+        select 1 from public.order_payment_proofs
+        where order_id = new.order_id and status = 'approved'
+      ) then
+    raise exception 'Verify the submitted payment proof before marking this online payment as paid.';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.record_manual_provider_payment_override(
+  target_order_id uuid,
+  override_reason text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_order public.orders%rowtype;
+  current_payment public.payments%rowtype;
+  normalized_reason text := btrim(override_reason);
+begin
+  select * into current_order
+  from public.orders
+  where id = target_order_id
+  for update;
+  if not found then raise exception 'Order not found.'; end if;
+
+  if not public.is_active_account()
+      or not public.can_access_branch(current_order.branch_id)
+      or not public.has_permission(current_order.branch_id, 'orders', 'edit') then
+    raise exception 'You do not have permission to record this payment.'
+      using errcode = '42501';
+  end if;
+  if current_order.status = 'cancelled' or current_order.payment_status <> 'unpaid' then
+    raise exception 'Only unpaid, active orders can be marked paid.';
+  end if;
+  if normalized_reason is null or length(normalized_reason) not between 3 and 500 then
+    raise exception 'Enter a manual override reason between 3 and 500 characters.';
+  end if;
+
+  select payment.* into current_payment
+  from public.payments as payment
+  join public.payment_methods as method on method.id = payment.payment_method_id
+  where payment.order_id = target_order_id
+    and payment.status = 'unpaid'
+    and method.settlement_type = 'provider'
+  for update of payment;
+  if not found then
+    raise exception 'Manual override is only available for unpaid online payment orders.';
+  end if;
+  if exists (
+    select 1 from public.order_payment_proofs
+    where order_id = target_order_id
+  ) then
+    raise exception 'Review the submitted payment proof instead of using a manual override.';
+  end if;
+
+  insert into public.payment_manual_override_authorizations (
+    transaction_id, order_id, actor_id
+  )
+  values (pg_catalog.txid_current(), target_order_id, (select auth.uid()));
+
+  perform public.record_order_payment(target_order_id);
+
+  delete from public.payment_manual_override_authorizations
+  where transaction_id = pg_catalog.txid_current()
+    and order_id = target_order_id
+    and actor_id = (select auth.uid());
+
+  insert into public.audit_logs (
+    actor_id, action, record_type, record_id, branch_id, details
+  )
+  values (
+    (select auth.uid()),
+    'order_payment_manual_override',
+    'order',
+    target_order_id,
+    current_order.branch_id,
+    jsonb_build_object(
+      'amount', current_order.total,
+      'payment_method', current_payment.payment_method_code,
+      'payment_status', 'paid',
+      'reason', normalized_reason
+    )
+  );
+end;
+$$;
+
+revoke all on function public.record_manual_provider_payment_override(uuid, text)
+  from public, anon, authenticated;
+grant execute on function public.record_manual_provider_payment_override(uuid, text)
+  to authenticated;
+
+create or replace function public.submit_order_payment_proof(
+  target_order_id uuid,
+  uploaded_document_path text,
+  payment_reference_number text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := (select auth.uid());
+  current_order public.orders%rowtype;
+  current_payment public.payments%rowtype;
+  current_method public.payment_methods%rowtype;
+  proof_id uuid;
+  current_proof public.order_payment_proofs%rowtype;
+begin
+  if current_user_id is null or not public.is_active_account() then
+    raise exception 'Sign in with an active account to submit payment proof.'
+      using errcode = '42501';
+  end if;
+  if payment_reference_number is null
+      or length(btrim(payment_reference_number)) not between 4 and 50 then
+    raise exception 'Enter a payment reference number between 4 and 50 characters.';
+  end if;
+
+  select * into current_order
+  from public.orders
+  where id = target_order_id and customer_id = current_user_id
+  for update;
+  if not found then raise exception 'This order is not available to your account.'; end if;
+  if current_order.payment_status <> 'unpaid'
+      or current_order.status in ('cancelled', 'completed') then
+    raise exception 'Payment proof can only be submitted for an active unpaid order.';
+  end if;
+  if exists (
+    select 1 from public.benefit_discount_requests
+    where order_id = target_order_id and status = 'pending'
+  ) then
+    raise exception 'Wait for staff to verify your benefit discount before paying the updated total.';
+  end if;
+
+  select payment.* into current_payment
+  from public.payments as payment
+  where payment.order_id = target_order_id;
+  if not found then raise exception 'Payment transaction not found.'; end if;
+
+  select method.* into current_method
+  from public.payment_methods as method
+  where method.id = current_payment.payment_method_id;
+  if not found or current_method.settlement_type <> 'provider' then
+    raise exception 'This order does not use an online payment method.';
+  end if;
+
+  if uploaded_document_path is null
+      or length(uploaded_document_path) > 512
+      or split_part(uploaded_document_path, '/', 1) <> current_user_id::text
+      or split_part(uploaded_document_path, '/', 2) <> target_order_id::text
+      or not exists (
+        select 1 from storage.objects
+        where bucket_id = 'order-payment-proofs'
+          and name = uploaded_document_path
+          and owner_id = current_user_id::text
+      ) then
+    raise exception 'Upload a private payment proof under your own order folder.';
+  end if;
+
+  select * into current_proof
+  from public.order_payment_proofs
+  where order_id = target_order_id
+  for update;
+  if found then
+    if current_proof.status <> 'rejected' then
+      raise exception 'Payment proof has already been submitted for this order.';
+    end if;
+    update public.order_payment_proofs
+    set document_path = uploaded_document_path,
+        reference_number = btrim(payment_reference_number),
+        status = 'pending',
+        review_note = null,
+        reviewed_by = null,
+        reviewed_at = null,
+        created_at = now()
+    where id = current_proof.id
+    returning id into proof_id;
+  else
+    insert into public.order_payment_proofs (
+      order_id, customer_id, branch_id, document_path, reference_number
+    )
+    values (
+      current_order.id, current_user_id, current_order.branch_id,
+      uploaded_document_path, btrim(payment_reference_number)
+    )
+    returning id into proof_id;
+  end if;
+
+  insert into public.audit_logs (
+    actor_id, action, record_type, record_id, branch_id, details
+  )
+  values (
+    current_user_id, 'order_payment_proof_submitted', 'order_payment_proof',
+    proof_id, current_order.branch_id,
+    jsonb_build_object(
+      'order_id', current_order.id,
+      'payment_method', current_payment.payment_method_code
+    )
+  );
+  return proof_id;
+end;
+$$;
+
+create or replace function public.review_order_payment_proof(
+  target_order_id uuid,
+  decision text,
+  decision_note text default ''
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_order public.orders%rowtype;
+  current_proof public.order_payment_proofs%rowtype;
+begin
+  if decision not in ('approved', 'rejected') then
+    raise exception 'Choose approve or reject.';
+  end if;
+  if decision_note is not null and length(decision_note) > 500 then
+    raise exception 'Review notes cannot exceed 500 characters.';
+  end if;
+
+  select * into current_order
+  from public.orders where id = target_order_id for update;
+  if not found then raise exception 'Order not found.'; end if;
+  if not public.is_active_account()
+      or not public.can_access_branch(current_order.branch_id)
+      or not public.has_permission(current_order.branch_id, 'orders', 'edit') then
+    raise exception 'You do not have permission to review this payment.'
+      using errcode = '42501';
+  end if;
+
+  select * into current_proof
+  from public.order_payment_proofs
+  where order_id = target_order_id
+  for update;
+  if not found then raise exception 'No payment proof has been submitted.'; end if;
+  if current_proof.status <> 'pending' then
+    raise exception 'This payment proof has already been reviewed.';
+  end if;
+  if decision = 'approved' and exists (
+    select 1 from public.benefit_discount_requests
+    where order_id = target_order_id and status = 'pending'
+  ) then
+    raise exception 'Verify the benefit discount before approving payment.';
+  end if;
+  if decision = 'rejected'
+      and (decision_note is null or length(btrim(decision_note)) < 3) then
+    raise exception 'Provide a rejection reason of at least 3 characters.';
+  end if;
+
+  update public.order_payment_proofs
+  set status = decision,
+      review_note = nullif(btrim(decision_note), ''),
+      reviewed_by = (select auth.uid()),
+      reviewed_at = now()
+  where id = current_proof.id;
+
+  if decision = 'approved' then
+    perform public.record_order_payment(target_order_id);
+  else
+    insert into public.audit_logs (
+      actor_id, action, record_type, record_id, branch_id, details
+    )
+    values (
+      (select auth.uid()), 'order_payment_proof_rejected', 'order_payment_proof',
+      current_proof.id, current_order.branch_id,
+      jsonb_build_object('order_id', target_order_id, 'review_note', btrim(decision_note))
+    );
+  end if;
+end;
+$$;
+
+revoke all on function public.submit_order_payment_proof(uuid, text, text)
+  from public, anon, authenticated;
+grant execute on function public.submit_order_payment_proof(uuid, text, text)
+  to authenticated;
+revoke all on function public.review_order_payment_proof(uuid, text, text)
+  from public, anon, authenticated;
+grant execute on function public.review_order_payment_proof(uuid, text, text)
+  to authenticated;
+
+notify pgrst, 'reload schema';

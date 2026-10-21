@@ -58,6 +58,7 @@ export default function CheckoutPage({ panel = false }) {
   const { items, branchId, subtotal, setBranchId, clearCart } = useCart()
   const [branches, setBranches] = useState([])
   const [paymentMethods, setPaymentMethods] = useState([])
+  const [paymentMethodsBranchId, setPaymentMethodsBranchId] = useState('')
   const [promotions, setPromotions] = useState([])
   const [phone, setPhone] = useState(account.phone || '')
   const [deliveryAddress, setDeliveryAddress] = useState(account.address || '')
@@ -113,18 +114,12 @@ export default function CheckoutPage({ panel = false }) {
 
   useEffect(() => {
     let active = true
-    Promise.all([getPublicBranches(), getAvailablePaymentMethods(), getBenefitPolicy()])
-      .then(([loadedBranches, loadedPaymentMethods, loadedBenefitPolicy]) => {
+    Promise.all([getPublicBranches(), getBenefitPolicy()])
+      .then(([loadedBranches, loadedBenefitPolicy]) => {
         if (!active) return
         setBranches(loadedBranches)
-        setPaymentMethods(loadedPaymentMethods)
         setBenefitPolicy(loadedBenefitPolicy)
         setBenefitType(loadedBenefitPolicy.pwd_enabled ? 'pwd' : 'senior_citizen')
-        setPaymentMethodId((current) => current || (
-          loadedPaymentMethods.find((method) => method.code === 'cash_at_branch')?.id ||
-          loadedPaymentMethods.find((method) => method.code === 'gcash')?.id ||
-          ''
-        ))
       })
       .catch((error) => {
         console.error('Unable to load checkout options.', error)
@@ -137,6 +132,32 @@ export default function CheckoutPage({ panel = false }) {
       active = false
     }
   }, [optionsReloadKey])
+
+  useEffect(() => {
+    let active = true
+    if (!branchId) return () => { active = false }
+    getAvailablePaymentMethods(branchId)
+      .then((methods) => {
+        if (!active) return
+        setPaymentMethods(methods)
+        setPaymentMethodsBranchId(branchId)
+        const availableMethods = fulfillment === 'delivery'
+          ? methods.filter((method) => method.settlement_type === 'provider' && method.qr_code_path)
+          : methods
+        setPaymentMethodId((current) =>
+          availableMethods.some((method) => method.id === current)
+            ? current
+            : availableMethods.find((method) => method.settlement_type === 'pay_at_branch')?.id ||
+              availableMethods[0]?.id ||
+              '',
+        )
+      })
+      .catch((error) => {
+        console.error('Unable to load branch payment methods.', error)
+        if (active) setLoadError(error.message)
+      })
+    return () => { active = false }
+  }, [branchId, fulfillment, optionsReloadKey])
 
   useEffect(() => {
     if (!branchId || !productIds.length) return undefined
@@ -161,18 +182,14 @@ export default function CheckoutPage({ panel = false }) {
   }, [branchId, productIds, promotionId, checkoutDataReloadKey])
 
   const selectedBranch = branches.find((branch) => branch.id === branchId)
-  const cashPaymentMethod = paymentMethods.find((method) => method.code === 'cash_at_branch')
-  const onlinePaymentMethod = paymentMethods.find(
-    (method) => method.code === 'gcash' && method.settlement_type === 'provider',
+  const branchPaymentMethods = paymentMethodsBranchId === branchId ? paymentMethods : []
+  const onlinePaymentMethods = branchPaymentMethods.filter(
+    (method) => method.settlement_type === 'provider' && method.qr_code_path,
   )
-  const canPayOnline = Boolean(onlinePaymentMethod && selectedBranch?.gcash_qr_path)
-  const availablePaymentMethods = useMemo(() => {
-    if (fulfillment === 'delivery') return canPayOnline ? [onlinePaymentMethod] : []
-    return [
-      cashPaymentMethod,
-      ...(canPayOnline ? [onlinePaymentMethod] : []),
-    ].filter(Boolean)
-  }, [canPayOnline, cashPaymentMethod, fulfillment, onlinePaymentMethod])
+  const canPayOnline = onlinePaymentMethods.length > 0
+  const availablePaymentMethods = fulfillment === 'delivery'
+    ? onlinePaymentMethods
+    : branchPaymentMethods
   const selectedPaymentMethod = availablePaymentMethods.find((method) => method.id === paymentMethodId)
   const expectedDataKey = `${branchId}:${productIds.slice().sort().join(',')}`
   const branchDataLoading = Boolean(branchId && productIds.length && dataKey !== expectedDataKey)
@@ -189,12 +206,6 @@ export default function CheckoutPage({ panel = false }) {
       setDataKey('')
     }
   }, [branchId, branches, isLoading, setBranchId])
-
-  useEffect(() => {
-    if (!availablePaymentMethods.some((method) => method.id === paymentMethodId)) {
-      setPaymentMethodId(availablePaymentMethods[0]?.id || '')
-    }
-  }, [availablePaymentMethods, paymentMethodId])
 
   async function submitOrder(event) {
     event.preventDefault()
@@ -245,34 +256,34 @@ export default function CheckoutPage({ panel = false }) {
     if (!selectedPaymentMethod) {
       setErrorMessage(
         fulfillment === 'delivery'
-          ? 'Delivery requires an active GCash QR payment option at the selected branch.'
+          ? 'Delivery requires an enabled online QR payment method at the selected branch.'
           : 'Choose an available payment method.',
       )
       return
     }
-    if (fulfillment === 'delivery' && selectedPaymentMethod.code !== 'gcash') {
-      setErrorMessage('Delivery orders can only be paid online through GCash.')
+    if (fulfillment === 'delivery' && selectedPaymentMethod.settlement_type !== 'provider') {
+      setErrorMessage('Delivery orders require an online QR payment method.')
       return
     }
-    if (selectedPaymentMethod?.code === 'gcash' && !selectedBranch?.gcash_qr_path) {
-      setErrorMessage('GCash is not set up for the selected branch. Choose pick-up or contact the café.')
+    if (selectedPaymentMethod.settlement_type === 'provider' && !selectedPaymentMethod.qr_code_path) {
+      setErrorMessage(`${selectedPaymentMethod.name} QR is not set up for this branch.`)
       return
     }
-    if (selectedPaymentMethod?.code === 'gcash') {
+    if (selectedPaymentMethod.settlement_type === 'provider') {
       if (!paymentReference.trim() || paymentReference.trim().length < 4 || paymentReference.trim().length > 50) {
-        setErrorMessage('Enter a GCash reference number between 4 and 50 characters.')
+        setErrorMessage('Enter a payment reference number between 4 and 50 characters.')
         return
       }
       if (!paymentProofFile) {
-        setErrorMessage('Upload your GCash receipt or payment screenshot.')
+        setErrorMessage('Upload your payment receipt or screenshot.')
         return
       }
       if (paymentProofFile.size > 10 * 1024 * 1024) {
-        setErrorMessage('The GCash receipt must be 10 MB or smaller.')
+        setErrorMessage('The payment receipt must be 10 MB or smaller.')
         return
       }
       if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(paymentProofFile.type)) {
-        setErrorMessage('Use a JPG, PNG, WebP, or PDF GCash receipt.')
+        setErrorMessage('Use a JPG, PNG, WebP, or PDF payment receipt.')
         return
       }
     }
@@ -379,7 +390,7 @@ export default function CheckoutPage({ panel = false }) {
         } : null,
       })
       createdOrderId = orderId
-      if (selectedPaymentMethod?.code === 'gcash') {
+      if (selectedPaymentMethod?.settlement_type === 'provider') {
         paymentProofPath = `${account.id}/${orderId}/proof-${crypto.randomUUID()}.${paymentProofExtension}`
         const { error: uploadError } = await getSupabaseClient()
           .storage
@@ -388,7 +399,7 @@ export default function CheckoutPage({ panel = false }) {
             contentType: paymentProofFile.type,
             upsert: false,
           })
-          if (uploadError) throw new Error(`Order was created, but the GCash receipt could not be uploaded: ${uploadError.message}`)
+          if (uploadError) throw new Error(`Order was created, but the payment receipt could not be uploaded: ${uploadError.message}`)
           await submitOrderPaymentProof(orderId, paymentProofPath, paymentReference.trim())
         paymentProofSubmitted = true
       }
@@ -495,6 +506,7 @@ export default function CheckoutPage({ panel = false }) {
                 value={branches.some((branch) => branch.id === branchId) ? branchId : ''}
                 onChange={(event) => {
                   setBranchId(event.target.value)
+                  setPaymentMethodId('')
                   setDataKey('')
                   setLoadError('')
                 }}
@@ -529,7 +541,7 @@ export default function CheckoutPage({ panel = false }) {
                   {requestBenefit && (
                     <>
                       <Alert severity="info">
-                        Upload the beneficiary’s ID and select only quantities for their exclusive use. The discount below is an estimate; staff must verify the ID before applying it. If paying with GCash, wait for approval before paying.
+                        Upload the beneficiary’s ID and select only quantities for their exclusive use. The discount below is an estimate; staff must verify the ID before applying it. If paying online, wait for approval before paying.
                       </Alert>
                       <FormControl fullWidth>
                         <InputLabel id="checkout-benefit-type">Benefit type</InputLabel>
@@ -628,7 +640,14 @@ export default function CheckoutPage({ panel = false }) {
               <RadioGroup
                 value={fulfillment}
                 onChange={(event) => {
-                  setFulfillment(event.target.value)
+                  const nextFulfillment = event.target.value
+                  const nextMethods = nextFulfillment === 'delivery'
+                    ? onlinePaymentMethods
+                    : branchPaymentMethods
+                  setFulfillment(nextFulfillment)
+                  if (!nextMethods.some((method) => method.id === paymentMethodId)) {
+                    setPaymentMethodId(nextMethods[0]?.id || '')
+                  }
                   setErrorMessage('')
                 }}
               >
@@ -645,7 +664,7 @@ export default function CheckoutPage({ panel = false }) {
             </FormControl>
             {selectedBranch?.delivery_enabled && !canPayOnline && (
               <Alert severity="warning">
-                Delivery requires this branch’s GCash QR to be set up. Choose pick-up or contact the café.
+                Delivery requires at least one online QR payment method configured for this branch.
               </Alert>
             )}
             {fulfillment === 'delivery' && (
@@ -701,35 +720,41 @@ export default function CheckoutPage({ panel = false }) {
                     key={method.id}
                     value={method.id}
                     control={<Radio />}
-                    label={method.code === 'gcash' ? 'Online payment · GCash QR' : 'Cash at pick-up'}
-                    disabled={fulfillment === 'delivery' && method.code !== 'gcash'}
+                    label={method.settlement_type === 'provider'
+                      ? `Online payment · ${method.name}`
+                      : `${method.name} · Pick-up`}
                   />
                 ))}
               </RadioGroup>
+              {!availablePaymentMethods.length && fulfillment === 'pickup' && (
+                <Typography variant="body2" color="error">
+                  No payment methods are currently enabled for this branch.
+                </Typography>
+              )}
               {!availablePaymentMethods.length && fulfillment === 'delivery' && (
                 <Typography variant="body2" color="error">
-                  Delivery is unavailable until GCash QR payment is configured for this branch.
+                  Delivery is unavailable until an online QR payment method is configured for this branch.
                 </Typography>
               )}
             </FormControl>
-            {selectedPaymentMethod?.code === 'gcash' && selectedBranch?.gcash_qr_path && (
+            {selectedPaymentMethod?.settlement_type === 'provider' && selectedPaymentMethod.qr_code_path && (
               <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-                  Scan {selectedBranch.name}’s GCash QR
+                  Scan {selectedBranch.name}’s {selectedPaymentMethod.name} QR
                 </Typography>
                 <Box
                   component="img"
-                  src={getSupabaseClient().storage.from('branch-payment-qr').getPublicUrl(selectedBranch.gcash_qr_path).data.publicUrl}
-                  alt={`${selectedBranch.name} GCash QR code`}
+                  src={getSupabaseClient().storage.from('branch-payment-qr').getPublicUrl(selectedPaymentMethod.qr_code_path).data.publicUrl}
+                  alt={`${selectedBranch.name} ${selectedPaymentMethod.name} QR code`}
                   sx={{ width: 'min(100%, 280px)', maxHeight: 280, objectFit: 'contain' }}
                 />
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Scan and pay using the QR code, then provide the GCash reference number and upload the receipt below.
+                  Scan and pay using the QR code, then provide the payment reference and upload the receipt below.
                   {requestBenefit && ' Your PWD/Senior discount will be verified by the branch.'}
                 </Typography>
                 <Stack spacing={1.5} sx={{ mt: 2, textAlign: 'left' }}>
                   <TextField
-                    label="GCash reference number"
+                    label={`${selectedPaymentMethod.name} reference number`}
                     value={paymentReference}
                     onChange={(event) => setPaymentReference(event.target.value)}
                     required
@@ -741,7 +766,7 @@ export default function CheckoutPage({ panel = false }) {
                     fullWidth
                     sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}
                   >
-                    {paymentProofFile?.name || 'Upload GCash receipt or screenshot'}
+                    {paymentProofFile?.name || 'Upload payment receipt or screenshot'}
                     <input
                       hidden
                       type="file"
@@ -886,7 +911,7 @@ export default function CheckoutPage({ panel = false }) {
                 The server rechecks menu availability, prices, discounts and total.
                 {requestBenefit
                   ? ' Staff must verify the ID before the discount becomes final and payment can be made.'
-                  : ' GCash payment is verified by staff before the order is marked paid.'}
+                  : ' Online QR payments are verified by staff before the order is marked paid.'}
               </Alert>
               <Button
                 type="submit"
@@ -898,7 +923,7 @@ export default function CheckoutPage({ panel = false }) {
                   branchDataLoading ||
                   !branchId ||
                   !selectedPaymentMethod ||
-                  (selectedPaymentMethod?.code === 'gcash' && !selectedBranch?.gcash_qr_path)
+                  (selectedPaymentMethod?.settlement_type === 'provider' && !selectedPaymentMethod.qr_code_path)
                 }
                 startIcon={isSubmitting ? <CircularProgress size={18} color="inherit" /> : null}
               >

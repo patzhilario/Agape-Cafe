@@ -28,7 +28,10 @@ export async function getOrders(branchId, page = 0, pageSize = 50) {
         id, product_name, variant_name, quantity, line_total,
         addons:order_item_addons(addon_name, unit_price)
       ),
-      payment:payments(payment_method_code, payment_method_name, amount, status),
+      payment:payments(
+        payment_method_code, payment_method_name, amount, status,
+        method:payment_methods(settlement_type)
+      ),
       payment_proof:order_payment_proofs(id, status, document_path, reference_number, review_note),
       benefit_request:benefit_discount_requests(
         id, benefit_type, status, discount_total, review_note, document_path,
@@ -70,6 +73,14 @@ export async function recordOrderPayment(orderId) {
 
 export async function recordManualGcashPaymentOverride(orderId, reason) {
   const { error } = await getSupabaseClient().rpc('record_manual_gcash_payment_override', {
+    target_order_id: orderId,
+    override_reason: reason,
+  })
+  if (error) throw new Error(error.message)
+}
+
+export async function recordManualProviderPaymentOverride(orderId, reason) {
+  const { error } = await getSupabaseClient().rpc('record_manual_provider_payment_override', {
     target_order_id: orderId,
     override_reason: reason,
   })

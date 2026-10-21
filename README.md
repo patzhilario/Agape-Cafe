@@ -222,6 +222,27 @@ Migration 25 fixes public reads of branch-specific menu size and add-on
 settings by separating anonymous visibility from authenticated staff access.
 Apply it after migration 24 on existing projects.
 
+Migration 26 adds the initial payment method report RPC. Apply it after
+migration 25 on existing projects.
+
+Migration 27 adds paginated payment transaction reporting and audited refund
+records. Refund entries record refunds already issued outside the system; they
+do not initiate transfers. Users need Financials edit permission to record one,
+and each refund requires a note. Apply it after migration 26.
+
+Migration 28 adds a product sales report for completed orders, grouped by day,
+month, or year, with branch and date filters. Apply it after migration 27.
+
+Migration 29 aligns payment-report date filters and day/month/year totals with
+the order creation date, matching Product Sales. The payment update timestamp
+remains available separately in transaction details. Apply it after migration
+28 on existing projects.
+
+Migration 30 makes payment methods branch-specific. Super Admins can enable,
+deactivate, or add cash and online QR methods for each branch. Customers can
+choose any enabled online QR method for delivery; submitted receipts still
+require staff review. Apply it after migration 29 on existing projects.
+
 The foundation migration also creates customer profiles and roles for any
 Supabase Auth users that already exist when the schema is installed. If the
 full setup was already installed before that backfill was added, run

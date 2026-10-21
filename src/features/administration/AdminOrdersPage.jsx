@@ -28,7 +28,7 @@ import {
 import {
   getAdminBranches,
   getOrders,
-  recordManualGcashPaymentOverride,
+  recordManualProviderPaymentOverride,
   recordOrderPayment,
   updateOrderStatus,
 } from './adminData.js'
@@ -148,20 +148,20 @@ export default function AdminOrdersPage() {
     setErrorMessage('')
     setSuccessMessage('')
     try {
-      if (action === 'paid' || action === 'manual_gcash_override') {
-        if (action === 'manual_gcash_override') {
+      if (action === 'paid' || action === 'manual_provider_override') {
+        if (action === 'manual_provider_override') {
           const reason = manualPaymentOverrideNotes[order.id]?.trim() || ''
           if (reason.length < 3) {
             setErrorMessage('Enter a reason of at least 3 characters for the manual override.')
             return
           }
-          await recordManualGcashPaymentOverride(order.id, reason)
+          await recordManualProviderPaymentOverride(order.id, reason)
         } else {
           await recordOrderPayment(order.id)
         }
         setSuccessMessage(
-          action === 'manual_gcash_override'
-            ? `Manual GCash payment override recorded for ${order.order_number}.`
+          action === 'manual_provider_override'
+            ? `Manual online payment override recorded for ${order.order_number}.`
             : `Payment recorded for ${order.order_number}.`,
         )
         setOrders((current) => current.map((item) => (
@@ -175,7 +175,7 @@ export default function AdminOrdersPage() {
           return
         }
         await reviewOrderPaymentProof(order.id, decision, note)
-        setSuccessMessage(`GCash payment proof ${decision} for ${order.order_number}.`)
+        setSuccessMessage(`Payment proof ${decision} for ${order.order_number}.`)
         setOrders((current) => current.map((item) => {
           if (item.id !== order.id) return item
           const updatedProofs = (item.payment_proof || []).map((proof) => ({
@@ -270,10 +270,8 @@ export default function AdminOrdersPage() {
         ) : !orders.length && page === 0 ? (
           <Alert severity="info">No orders are available for this branch.</Alert>
         ) : orders.map((order) => {
-          const isGcashOrder = (
-            order.payment?.[0]?.payment_method_code === 'gcash' ||
-            order.payment?.payment_method_code === 'gcash'
-          )
+          const payment = Array.isArray(order.payment) ? order.payment[0] : order.payment
+          const isOnlinePayment = payment?.method?.settlement_type === 'provider'
           return (
           <Paper key={order.id} variant="outlined" sx={{ overflow: 'hidden' }}>
             <Stack spacing={0}>
@@ -437,7 +435,7 @@ export default function AdminOrdersPage() {
                           ) : (
                             <Alert severity="warning">The ID document is unavailable. Request a new upload before approving.</Alert>
                           )}
-                          <Alert severity="info">Verify this ID before approving. GCash proof stays locked until the discount decision is made.</Alert>
+                          <Alert severity="info">Verify this ID before approving. Online payment proof stays locked until the discount decision is made.</Alert>
                           <TextField
                             size="small"
                             label="Reason (required if rejecting)"
@@ -499,7 +497,7 @@ export default function AdminOrdersPage() {
                   </Button>
                 )}
                 {canEditOrders && order.payment_status === 'unpaid' && order.status !== 'cancelled' &&
-                  !isGcashOrder && (
+                  !isOnlinePayment && (
                   <Button
                     variant="outlined"
                     disabled={busyOrderId === order.id}
@@ -508,25 +506,25 @@ export default function AdminOrdersPage() {
                     Record payment
                   </Button>
                 )}
-                {canEditOrders && isGcashOrder &&
+                {canEditOrders && isOnlinePayment &&
                   order.payment_status === 'unpaid' && order.status !== 'cancelled' && (
                   <Stack spacing={1} sx={{ width: '100%', flexBasis: '100%' }}>
                     {order.payment_proof?.[0] ? (
                       <>
                         <Typography variant="body2" fontWeight={600}>
-                          GCash proof: {label(order.payment_proof[0].status)}
+                          {payment.payment_method_name} proof: {label(order.payment_proof[0].status)}
                           {order.payment_proof[0].review_note ? ` · ${order.payment_proof[0].review_note}` : ''}
                         </Typography>
                         {order.payment_proof[0].reference_number && (
                           <Typography variant="body2">
-                            GCash reference number: {order.payment_proof[0].reference_number}
+                            Payment reference: {order.payment_proof[0].reference_number}
                           </Typography>
                         )}
                         {proofUrls[order.id] ? (
                           <Button
                             variant="outlined"
                             onClick={() => setDocumentPreview({
-                              title: `GCash payment proof · ${order.order_number}`,
+                              title: `${payment.payment_method_name} payment proof · ${order.order_number}`,
                               url: proofUrls[order.id],
                               type: getDocumentType(order.payment_proof[0].document_path),
                             })}
@@ -556,12 +554,12 @@ export default function AdminOrdersPage() {
                           </Stack>
                         )}
                         {order.payment_proof[0].status === 'pending' && order.benefit_request?.[0]?.status === 'pending' && (
-                          <Alert severity="warning">Verify the benefit ID request first; the GCash proof cannot be approved until the discounted total is confirmed.</Alert>
+                          <Alert severity="warning">Verify the benefit ID request first; payment proof cannot be approved until the discounted total is confirmed.</Alert>
                         )}
                       </>
                     ) : (
                       <Stack spacing={1}>
-                        <Typography variant="body2" color="text.secondary">Waiting for customer to upload GCash payment proof.</Typography>
+                        <Typography variant="body2" color="text.secondary">Waiting for customer to upload payment proof.</Typography>
                         <TextField
                           size="small"
                           label="Reason for manual override"
@@ -579,7 +577,7 @@ export default function AdminOrdersPage() {
                             busyOrderId === order.id ||
                             (manualPaymentOverrideNotes[order.id]?.trim().length || 0) < 3
                           }
-                          onClick={() => runOrderAction(order, 'manual_gcash_override')}
+                          onClick={() => runOrderAction(order, 'manual_provider_override')}
                           sx={{ alignSelf: 'flex-start' }}
                         >
                           Manual override: Record payment

@@ -90,11 +90,12 @@ export default function OrderDetailPage() {
   const benefitRequest = benefitResult.id === orderId ? benefitResult.request : null
   const benefitRequestError = benefitResult.id === orderId ? benefitResult.error : ''
   const paymentProof = order?.payment_proof?.[0]
-  const isGcashOrder = order?.payment?.payment_method_code === 'gcash'
+  const isOnlinePayment = order?.payment?.method?.settlement_type === 'provider'
+  const paymentMethodName = order?.payment?.payment_method_name || 'Online payment'
   const paymentProofNotice = !paymentProof && (
     location.state?.paymentProofError || (
       searchParams.get('proof') === 'needed'
-        ? 'Your order was created, but the GCash receipt could not be attached. Enter the reference number and upload it here.'
+        ? 'Your order was created, but the payment receipt could not be attached. Enter the reference number and upload it here.'
         : ''
     )
   )
@@ -104,11 +105,11 @@ export default function OrderDetailPage() {
     setPaymentProofError('')
     setPaymentProofSuccess('')
     if (!paymentProofFile) {
-      setPaymentProofError('Choose a GCash payment screenshot or PDF first.')
+      setPaymentProofError('Choose a payment screenshot or PDF first.')
       return
     }
     if (paymentReference.trim().length < 4 || paymentReference.trim().length > 50) {
-      setPaymentProofError('Enter a GCash reference number between 4 and 50 characters.')
+      setPaymentProofError('Enter a payment reference number between 4 and 50 characters.')
       return
     }
     if (paymentProofFile.size > 10 * 1024 * 1024) {
@@ -163,7 +164,7 @@ export default function OrderDetailPage() {
         },
       }))
     } catch (error) {
-      console.error('Unable to submit GCash payment proof.', error)
+      console.error('Unable to submit payment proof.', error)
       if (uploaded) {
         const { error: cleanupError } = await getSupabaseClient()
           .storage
@@ -308,41 +309,45 @@ export default function OrderDetailPage() {
                     {order.payment.payment_method_name}: {formatStatus(order.payment_status)}
                   </Alert>
                 )}
-                {isGcashOrder && paymentProof && (
+                {isOnlinePayment && paymentProof && (
                   <Alert severity={paymentProof.status === 'approved' ? 'success' : paymentProof.status === 'rejected' ? 'error' : 'info'}>
-                    GCash proof: {formatStatus(paymentProof.status)}
+                    Payment proof: {formatStatus(paymentProof.status)}
                     {paymentProof.reference_number ? ` · Reference: ${paymentProof.reference_number}` : ''}
                     {paymentProof.review_note ? ` · ${paymentProof.review_note}` : ''}
                   </Alert>
                 )}
               </Stack>
             </Paper>
-            {isGcashOrder && order.payment_status === 'unpaid' && !['cancelled', 'completed'].includes(order.status) && (
+            {isOnlinePayment && order.payment_status === 'unpaid' && !['cancelled', 'completed'].includes(order.status) && (
               <Paper component="form" onSubmit={uploadPaymentProof} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
                 <Stack spacing={2}>
-                  <Typography variant="h6">GCash payment</Typography>
+                  <Typography variant="h6">{paymentMethodName} payment</Typography>
                   {paymentProofNotice && <Alert severity="warning">{paymentProofNotice}</Alert>}
                   {benefitRequest?.status === 'pending' && (
                     <Alert severity="info">
-                      Your benefit ID is being verified. The branch will review your GCash proof after confirming the discount and updated total.
+                      Your benefit ID is being verified. The branch will review your payment proof after confirming the discount and updated total.
                     </Alert>
                   )}
                   {benefitRequest?.status !== 'pending' && (
                     <>
-                      {order.branch?.gcash_qr_path && (
+                      {(order.payment?.method?.qr_code_path || (
+                        order.payment?.payment_method_code === 'gcash' ? order.branch?.gcash_qr_path : null
+                      )) && (
                         <Box
                           component="img"
-                          src={getSupabaseClient().storage.from('branch-payment-qr').getPublicUrl(order.branch.gcash_qr_path).data.publicUrl}
-                          alt={`${order.branch?.name} GCash QR code`}
+                          src={getSupabaseClient().storage.from('branch-payment-qr').getPublicUrl(
+                            order.payment?.method?.qr_code_path || order.branch?.gcash_qr_path,
+                          ).data.publicUrl}
+                          alt={`${order.branch?.name} ${paymentMethodName} QR code`}
                           sx={{ width: 'min(100%, 280px)', maxHeight: 280, objectFit: 'contain', alignSelf: 'center' }}
                         />
                       )}
                       <Typography color="text.secondary">
-                        Pay the current order total of {formatPrice(order.total)} to {order.branch?.name} using the QR above, then enter the reference number and upload your GCash receipt.
+                        Pay the current order total of {formatPrice(order.total)} to {order.branch?.name} using the QR above, then enter the reference number and upload your receipt.
                       </Typography>
                       {(!paymentProof || paymentProof.status === 'rejected') && (
                         <TextField
-                          label="GCash reference number"
+                          label={`${paymentMethodName} reference number`}
                           value={paymentReference}
                           onChange={(event) => setPaymentReference(event.target.value)}
                           required

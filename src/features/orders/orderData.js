@@ -1,9 +1,11 @@
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
 
-export async function getAvailablePaymentMethods() {
+export async function getAvailablePaymentMethods(branchId) {
+  if (!branchId) return []
   const { data, error } = await getSupabaseClient()
     .from('payment_methods')
-    .select('id, code, name, instructions, settlement_type')
+    .select('id, code, name, instructions, settlement_type, qr_code_path')
+    .eq('branch_id', branchId)
     .eq('is_active', true)
     .order('name')
 
@@ -114,7 +116,10 @@ export async function getCustomerOrder(orderId) {
         unit_price, line_subtotal, discount_amount, line_total,
         addons:order_item_addons(addon_name, unit_price)
       ),
-      payment:payments(payment_method_code, payment_method_name, amount, status),
+      payment:payments(
+        payment_method_code, payment_method_name, amount, status,
+        method:payment_methods(qr_code_path, settlement_type)
+      ),
       payment_proof:order_payment_proofs(id, status, document_path, reference_number, review_note)
     `)
     .eq('id', orderId)
@@ -130,7 +135,7 @@ export async function submitOrderPaymentProof(orderId, documentPath, referenceNu
     uploaded_document_path: documentPath,
     payment_reference_number: referenceNumber,
   })
-  if (error) throw new Error(`Could not submit GCash payment proof: ${error.message}`)
+  if (error) throw new Error(`Could not submit payment proof: ${error.message}`)
   return data
 }
 
@@ -140,7 +145,7 @@ export async function reviewOrderPaymentProof(orderId, decision, note = '') {
     decision,
     decision_note: note,
   })
-  if (error) throw new Error(`Could not review GCash payment proof: ${error.message}`)
+  if (error) throw new Error(`Could not review payment proof: ${error.message}`)
 }
 
 export async function getOrderPaymentProofUrl(path) {
