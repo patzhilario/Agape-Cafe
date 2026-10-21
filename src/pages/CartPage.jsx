@@ -14,7 +14,7 @@ import {
 } from '@mui/material'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import QuantityStepper from '../components/public/QuantityStepper.jsx'
-import { getPublicBranches } from '../features/public/publicData.js'
+import { getCachedPublicBranches, getPublicBranches } from '../features/public/publicData.js'
 import { formatPrice } from '../features/public/publicData.js'
 import { useCart } from '../features/orders/useCart.js'
 import { getCartItemKey } from '../features/orders/cartUtils.js'
@@ -26,8 +26,9 @@ const hasSupabaseConfig =
 
 export default function CartPage() {
   const { items, branchId, subtotal, setBranchId, updateQuantity, removeItem } = useCart()
-  const [branches, setBranches] = useState([])
-  const [isLoading, setIsLoading] = useState(hasSupabaseConfig)
+  const cachedBranches = getCachedPublicBranches()
+  const [branches, setBranches] = useState(cachedBranches || [])
+  const [isLoading, setIsLoading] = useState(hasSupabaseConfig && cachedBranches === undefined)
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {

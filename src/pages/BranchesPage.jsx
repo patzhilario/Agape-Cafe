@@ -1,21 +1,19 @@
 import { useEffect, useState } from 'react'
-import { Box, Container, Stack, Typography } from '@mui/material'
-import { getPublicBranches } from '../features/public/publicData.js'
+import { Box, Button, Container, Stack, Typography } from '@mui/material'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined'
+import { getCachedPublicBranches, getPublicBranches } from '../features/public/publicData.js'
 import BranchCards from '../components/public/BranchCards.jsx'
-import {
-  PublicDataError,
-  PublicLoading,
-  SectionHeading,
-  SupabaseSetupNotice,
-} from '../components/public/PublicDataState.jsx'
+import { PublicDataError, PublicLoading, SupabaseSetupNotice } from '../components/public/PublicDataState.jsx'
 
 const hasSupabaseConfig =
   Boolean(import.meta.env.VITE_SUPABASE_URL) &&
   Boolean(import.meta.env.VITE_SUPABASE_ANON_KEY)
 
 export default function BranchesPage() {
-  const [branches, setBranches] = useState([])
-  const [isLoading, setIsLoading] = useState(hasSupabaseConfig)
+  const cachedBranches = getCachedPublicBranches()
+  const [branches, setBranches] = useState(cachedBranches || [])
+  const [isLoading, setIsLoading] = useState(hasSupabaseConfig && cachedBranches === undefined)
   const [errorMessage, setErrorMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -42,49 +40,134 @@ export default function BranchesPage() {
   }, [reloadKey])
 
   return (
-    <Box sx={{ bgcolor: 'background.default', minHeight: '70vh' }}>
+    <Box sx={{ bgcolor: '#f7f3ed', color: '#2c211b', minHeight: '70vh' }}>
       <Box
+        component="header"
         sx={{
-          py: { xs: 5, md: 7 },
-          background: 'linear-gradient(120deg, #f4eadc 0%, #fbf7f1 58%, #efe1d1 100%)',
-          borderBottom: 1,
-          borderColor: 'divider',
+          overflow: 'hidden',
+          bgcolor: '#30231c',
+          color: '#fffaf3',
         }}
       >
         <Container maxWidth="lg">
-          <Stack spacing={1.25} sx={{ maxWidth: 680 }}>
-            <Typography variant="overline" color="primary" sx={{ letterSpacing: '.14em' }}>
-              YOUR NEIGHBORHOOD COFFEE STOP
-            </Typography>
-            <Typography variant="h1" sx={{ color: 'primary.dark', fontSize: { xs: '2.5rem', md: '3.5rem' } }}>
-              Find your café.
-            </Typography>
-            <Typography color="text.secondary" sx={{ maxWidth: 560, lineHeight: 1.7 }}>
-              See where we are, check each branch’s details, and plan a little
-              coffee break close to you.
-            </Typography>
-          </Stack>
+          <Box
+            sx={{
+              minHeight: { xs: 340, md: 390 },
+              py: { xs: 6, md: 8 },
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: '1fr auto' },
+              gap: 3,
+              alignItems: 'center',
+            }}
+          >
+            <Stack spacing={{ xs: 2, md: 2.5 }} sx={{ maxWidth: 690 }}>
+              <Typography variant="overline" sx={{ color: '#d8b18a', letterSpacing: '.2em' }}>
+                AGAPÉ CAFÉ · OUR LOCATIONS
+              </Typography>
+              <Typography
+                component="h1"
+                sx={{
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontSize: { xs: 'clamp(3rem, 12vw, 4.2rem)', md: '5.2rem' },
+                  fontWeight: 400,
+                  letterSpacing: '-.055em',
+                  lineHeight: '.98',
+                }}
+              >
+                Come find us.
+              </Typography>
+              <Typography sx={{ maxWidth: 510, color: 'rgba(255,250,243,.74)', lineHeight: 1.8 }}>
+                A familiar cup, a new favorite, or a little time together.
+                There’s a seat waiting at an Agapé Café near you.
+              </Typography>
+              <Button
+                component="a"
+                href="#branch-locations"
+                variant="outlined"
+                color="inherit"
+                endIcon={<ArrowDownwardIcon />}
+                sx={{ alignSelf: 'flex-start', mt: 0.5, minHeight: 44 }}
+              >
+                Explore our locations
+              </Button>
+            </Stack>
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: { xs: 'row', md: 'column' },
+                alignItems: 'center',
+                justifyContent: { xs: 'flex-start', md: 'center' },
+                gap: { xs: 1.5, md: 1 },
+                pl: { md: 5 },
+                pt: { xs: 2, md: 0 },
+                minWidth: { md: 190 },
+                borderTop: { xs: '1px solid rgba(255,250,243,.2)', md: 0 },
+                borderLeft: { md: '1px solid rgba(255,250,243,.2)' },
+              }}
+            >
+              <PlaceOutlinedIcon sx={{ color: '#d8b18a', fontSize: { xs: 36, md: 60 } }} />
+              <Box sx={{ textAlign: { md: 'center' } }}>
+                <Typography
+                  sx={{
+                    color: '#d8b18a',
+                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    fontSize: { xs: '3rem', md: '4.75rem' },
+                    lineHeight: 1,
+                  }}
+                >
+                  {isLoading ? '—' : String(branches.length).padStart(2, '0')}
+                </Typography>
+                <Typography variant="overline" sx={{ color: 'rgba(255,250,243,.65)', letterSpacing: '.16em' }}>
+                  {branches.length === 1 ? 'LOCATION TO VISIT' : 'LOCATIONS TO VISIT'}
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
         </Container>
       </Box>
       <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
-        <Stack spacing={3}>
-          <SectionHeading
-            eyebrow="Come on in"
-            title="Our branches"
-            description="Choose a location to see its address, hours, and contact details."
-          />
-        {!hasSupabaseConfig && <SupabaseSetupNotice />}
-        {errorMessage && (
-          <PublicDataError
-            message={errorMessage}
-            onRetry={() => {
-              setIsLoading(true)
-              setReloadKey((key) => key + 1)
+        <Box id="branch-locations" sx={{ scrollMarginTop: 100 }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: '.72fr 1.28fr' },
+              gap: { xs: 1, md: 8 },
+              alignItems: 'end',
+              mb: { xs: 2, md: 3 },
             }}
-          />
-        )}
-        {!hasSupabaseConfig ? null : isLoading ? <PublicLoading /> : <BranchCards branches={branches} />}
-        </Stack>
+          >
+            <Typography variant="overline" sx={{ color: '#8a5b3c', letterSpacing: '.18em' }}>
+              PICK YOUR SPOT
+            </Typography>
+            <Box>
+              <Typography
+                component="h2"
+                sx={{
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontSize: { xs: '2.25rem', md: '3rem' },
+                  fontWeight: 400,
+                  letterSpacing: '-.04em',
+                }}
+              >
+                Our locations
+              </Typography>
+              <Typography sx={{ mt: 0.5, color: '#685c53', lineHeight: 1.7 }}>
+                Find the address, opening hours, and contact details for each café.
+              </Typography>
+            </Box>
+          </Box>
+          {!hasSupabaseConfig && <SupabaseSetupNotice />}
+          {errorMessage && (
+            <PublicDataError
+              message={errorMessage}
+              onRetry={() => {
+                setIsLoading(true)
+                setReloadKey((key) => key + 1)
+              }}
+            />
+          )}
+          {!hasSupabaseConfig ? null : isLoading ? <PublicLoading /> : <BranchCards branches={branches} />}
+        </Box>
       </Container>
     </Box>
   )

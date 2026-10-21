@@ -502,19 +502,22 @@ export default function CheckoutPage({ panel = false }) {
     <Container
       maxWidth={panel ? false : 'md'}
       sx={{
-        py: panel ? 1 : { xs: 5, md: 8 },
+        py: panel ? 2 : { xs: 5, md: 8 },
         px: panel ? 0 : undefined,
         width: panel ? '100%' : undefined,
         minWidth: 0,
         boxSizing: 'border-box',
       }}
     >
-      <Stack spacing={3}>
-        <Box>
-          <Typography variant="overline" color="primary">
+      <Stack spacing={panel ? 2.5 : 3}>
+        <Box sx={{ pb: panel ? 1 : 0 }}>
+          <Typography variant="overline" color="primary" sx={{ letterSpacing: 1.5 }}>
             Agapé Café · Secure checkout
           </Typography>
-          <Typography variant={panel ? 'h3' : 'h1'}>Place your order</Typography>
+          <Typography variant={panel ? 'h4' : 'h1'} fontWeight={700}>Place your order</Typography>
+          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+            Choose your branch and order details to continue.
+          </Typography>
         </Box>
         {loadError && (
           <PublicDataError
@@ -535,11 +538,14 @@ export default function CheckoutPage({ panel = false }) {
           sx={{
             display: 'grid',
             gridTemplateColumns: panel ? 'minmax(0, 1fr)' : { xs: '1fr', md: '1.15fr .85fr' },
-            gap: 3,
+            gap: panel ? 2.5 : 3,
             minWidth: 0,
           }}
         >
-          <Stack spacing={2.5}>
+          <Stack spacing={2.25}>
+            <Typography variant="subtitle1" fontWeight={700}>
+              1. Choose a branch
+            </Typography>
             <FormControl fullWidth required>
               <InputLabel id="checkout-branch-label">Branch</InputLabel>
               <Select
@@ -688,8 +694,25 @@ export default function CheckoutPage({ panel = false }) {
               </Typography>
             )}
             <FormControl>
-              <Typography variant="subtitle1" fontWeight={700}>How would you like your order?</Typography>
+              <Typography variant="subtitle1" fontWeight={700}>
+                2. How would you like your order?
+              </Typography>
               <RadioGroup
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                  gap: 0.75,
+                  mt: 1,
+                  '& .MuiFormControlLabel-root': {
+                    m: 0,
+                    minWidth: 0,
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 2,
+                    px: 1,
+                    py: 0.5,
+                  },
+                }}
                 value={fulfillment}
                 onChange={(event) => {
                   const nextFulfillment = event.target.value
@@ -791,6 +814,9 @@ export default function CheckoutPage({ panel = false }) {
                 helperText="Enter the complete address and any useful landmark."
               />
             )}
+            <Typography variant="subtitle1" fontWeight={700}>
+              3. Contact and payment
+            </Typography>
             <TextField
               label="Contact phone"
               value={phone}
@@ -813,7 +839,7 @@ export default function CheckoutPage({ panel = false }) {
               helperText={`${note.length}/500`}
             />
             <Box>
-              <Typography variant="subtitle1" fontWeight={700}>Payment method</Typography>
+              <Typography variant="subtitle2" fontWeight={700}>Payment method</Typography>
               {isOnsiteFulfillment && (
                 <>
                   {availablePaymentMethods.some((method) => method.settlement_type === 'pay_at_branch') && (
@@ -960,16 +986,35 @@ export default function CheckoutPage({ panel = false }) {
               Back to menu
             </Button>
           </Stack>
-          <Paper variant="outlined" sx={{ p: 2.5, alignSelf: 'start' }}>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: { xs: 2, sm: 2.5 },
+              alignSelf: 'start',
+              borderRadius: 3,
+              bgcolor: '#fbf8f3',
+              position: panel ? 'static' : { md: 'sticky' },
+              top: 24,
+            }}
+          >
             <Stack spacing={2}>
-              <Typography variant="h6">Order summary</Typography>
+              <Box>
+                <Typography variant="h6" fontWeight={700}>Order summary</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {items.reduce((sum, item) => sum + item.quantity, 0)} items
+                </Typography>
+              </Box>
               {items.map((item) => {
                 const basePrice = item.variantId ? item.variantPrice : item.productPrice
                 const addonsTotal = item.addons.reduce((sum, addon) => sum + addon.price, 0)
                 const unit = basePrice +
                   addonsTotal
                 return (
-                  <Stack key={getCartItemKey(item)} spacing={0.75}>
+                  <Stack
+                    key={getCartItemKey(item)}
+                    spacing={0.75}
+                    sx={{ pb: 1.5, borderBottom: 1, borderColor: 'divider' }}
+                  >
                     <Typography fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>
                       {item.productName}
                     </Typography>
@@ -1034,8 +1079,10 @@ export default function CheckoutPage({ panel = false }) {
                 </Stack>
               )}
               <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between' }}>
-                <Typography variant="h6">{requestBenefit ? 'Estimated total after approval' : 'Estimated total'}</Typography>
-                <Typography variant="h6">
+                <Typography variant="subtitle1" fontWeight={700}>
+                  {requestBenefit ? 'Estimated total after approval' : 'Estimated total'}
+                </Typography>
+                <Typography variant="h6" fontWeight={700}>
                   {formatPrice(Math.max(
                     0,
                     subtotal -

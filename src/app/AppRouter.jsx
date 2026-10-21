@@ -65,7 +65,7 @@ function CheckoutDrawer({ location }) {
       slotProps={{
         paper: {
           sx: {
-            width: { xs: '100vw', sm: 360 },
+            width: { xs: '100vw', sm: 520, md: 600 },
             minWidth: 0,
             maxWidth: '100vw',
             boxSizing: 'border-box',
@@ -76,12 +76,30 @@ function CheckoutDrawer({ location }) {
         },
       }}
     >
-      <Stack direction="row" sx={{ justifyContent: 'flex-end', px: 2, pt: 1 }}>
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: { xs: 2, sm: 3 },
+          py: 1.5,
+          borderBottom: 1,
+          borderColor: 'divider',
+          flexShrink: 0,
+        }}
+      >
+        <Box>
+          <Typography variant="overline" color="primary" sx={{ letterSpacing: 1.5 }}>
+            Agapé Café
+          </Typography>
+          <Typography variant="subtitle1" fontWeight={700}>Checkout</Typography>
+        </Box>
         <IconButton aria-label="Close checkout" onClick={closeDrawer}>
           <CloseIcon />
         </IconButton>
       </Stack>
-      <Box sx={{ flex: 1, minWidth: 0, width: '100%', overflowY: 'auto', px: 2, pb: 3 }}>
+      <Box sx={{ flex: 1, minHeight: 0, minWidth: 0, width: '100%', overflowY: 'auto', px: { xs: 2, sm: 3 }, pb: 3 }}>
         <Routes location={location}>
           <Route
             path="/customer"

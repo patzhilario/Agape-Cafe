@@ -1,5 +1,68 @@
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
 
+const PUBLIC_DATA_CACHE_TTL_MS = 60_000
+const publicDataCache = new Map()
+const pendingPublicData = new Map()
+
+function getPublicProductsCacheKey({ branchId, featured, limit, productId } = {}) {
+  return `products:${JSON.stringify({
+    branchId: branchId || '',
+    featured: Boolean(featured),
+    limit: limit || null,
+    productId: productId || '',
+  })}`
+}
+
+function getCachedPublicData(key) {
+  const cached = publicDataCache.get(key)
+  if (!cached) return undefined
+  if (cached.expiresAt <= Date.now()) {
+    publicDataCache.delete(key)
+    return undefined
+  }
+  return cached.value
+}
+
+function loadPublicData(key, loader) {
+  const cached = getCachedPublicData(key)
+  if (cached !== undefined) return Promise.resolve(cached)
+
+  const pending = pendingPublicData.get(key)
+  if (pending) return pending
+
+  const request = Promise.resolve()
+    .then(loader)
+    .then((value) => {
+      publicDataCache.set(key, {
+        value,
+        expiresAt: Date.now() + PUBLIC_DATA_CACHE_TTL_MS,
+      })
+      return value
+    })
+    .finally(() => {
+      if (pendingPublicData.get(key) === request) pendingPublicData.delete(key)
+    })
+
+  pendingPublicData.set(key, request)
+  return request
+}
+
+export function getCachedPublicProducts(options) {
+  return getCachedPublicData(getPublicProductsCacheKey(options))
+}
+
+export function getCachedPublicCategories() {
+  return getCachedPublicData('categories')
+}
+
+export function getCachedPublicBranches() {
+  return getCachedPublicData('branches')
+}
+
+export function getCachedPublicPromotions() {
+  return getCachedPublicData('promotions')
+}
+
 export function publicImageUrl(path) {
   if (!path) return ''
   return getSupabaseClient().storage.from('menu-images').getPublicUrl(path).data.publicUrl
@@ -61,7 +124,7 @@ function normalizeProduct(
   }
 }
 
-export async function getPublicProducts({ branchId, featured, limit, productId } = {}) {
+async function loadPublicProducts({ branchId, featured, limit, productId } = {}) {
   const supabase = getSupabaseClient()
   let availabilityByProduct = new Map()
 
@@ -142,47 +205,57 @@ export async function getPublicProducts({ branchId, featured, limit, productId }
   )).filter(Boolean)
 }
 
+export function getPublicProducts(options = {}) {
+  return loadPublicData(getPublicProductsCacheKey(options), () => loadPublicProducts(options))
+}
+
 export async function getPublicProduct(productId, branchId) {
   const products = await getPublicProducts({ productId, branchId })
   return products[0] || null
 }
 
-export async function getPublicCategories() {
-  const { data, error } = await getSupabaseClient()
-    .from('categories')
-    .select('id, name, slug, description, sort_order')
-    .eq('is_published', true)
-    .order('sort_order')
-    .order('name')
+export function getPublicCategories() {
+  return loadPublicData('categories', async () => {
+    const { data, error } = await getSupabaseClient()
+      .from('categories')
+      .select('id, name, slug, description, sort_order')
+      .eq('is_published', true)
+      .order('sort_order')
+      .order('name')
 
-  if (error) throw new Error(`Could not load menu categories: ${error.message}`)
-  return data
+    if (error) throw new Error(`Could not load menu categories: ${error.message}`)
+    return data
+  })
 }
 
-export async function getPublicBranches() {
-  const { data, error } = await getSupabaseClient()
-    .from('branches')
-    .select('id, name, address, map_url, phone, email, operating_hours, gcash_qr_path, delivery_enabled, delivery_fee')
-    .eq('is_active', true)
-    .order('name')
+export function getPublicBranches() {
+  return loadPublicData('branches', async () => {
+    const { data, error } = await getSupabaseClient()
+      .from('branches')
+      .select('id, name, address, map_url, phone, email, operating_hours, gcash_qr_path, delivery_enabled, delivery_fee')
+      .eq('is_active', true)
+      .order('name')
 
-  if (error) throw new Error(`Could not load active branches: ${error.message}`)
-  return data
+    if (error) throw new Error(`Could not load active branches: ${error.message}`)
+    return data
+  })
 }
 
-export async function getPublicPromotions() {
-  const { data, error } = await getSupabaseClient()
-    .from('promotions')
-    .select(
-      'id, name, description, terms, discount_type, discount_value, max_discount, minimum_purchase, starts_at, ends_at',
-    )
-    .eq('is_active', true)
-    .lte('starts_at', new Date().toISOString())
-    .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`)
-    .order('ends_at', { ascending: true, nullsFirst: false })
+export function getPublicPromotions() {
+  return loadPublicData('promotions', async () => {
+    const { data, error } = await getSupabaseClient()
+      .from('promotions')
+      .select(
+        'id, name, description, terms, discount_type, discount_value, max_discount, minimum_purchase, starts_at, ends_at',
+      )
+      .eq('is_active', true)
+      .lte('starts_at', new Date().toISOString())
+      .or(`ends_at.is.null,ends_at.gt.${new Date().toISOString()}`)
+      .order('ends_at', { ascending: true, nullsFirst: false })
 
-  if (error) throw new Error(`Could not load current promotions: ${error.message}`)
-  return data
+    if (error) throw new Error(`Could not load current promotions: ${error.message}`)
+    return data
+  })
 }
 
 export function formatPrice(value) {

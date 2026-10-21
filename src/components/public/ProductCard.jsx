@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import CoffeeOutlinedIcon from '@mui/icons-material/CoffeeOutlined'
+import AddShoppingCartOutlinedIcon from '@mui/icons-material/AddShoppingCartOutlined'
 import {
   Box,
   Button,
@@ -30,15 +31,31 @@ export default function ProductCard({ product }) {
 
   return (
     <>
-      <Card variant="outlined" sx={{ height: '100%', overflow: 'hidden' }}>
+      <Card
+        variant="outlined"
+        sx={{
+          height: '100%',
+          overflow: 'hidden',
+          borderRadius: 3,
+          borderColor: 'rgba(67, 48, 34, 0.14)',
+          bgcolor: '#fffdfa',
+          transition: 'transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease',
+          '&:hover': {
+            transform: 'translateY(-3px)',
+            borderColor: 'rgba(91, 57, 39, 0.32)',
+            boxShadow: '0 14px 30px rgba(57, 35, 23, 0.09)',
+          },
+        }}
+      >
         <CardActionArea component={RouterLink} to={`/menu/${product.id}`}>
           <Box
             sx={{
-              aspectRatio: '4 / 3',
+              position: 'relative',
+              aspectRatio: '1.12 / 1',
               bgcolor: '#eee7dd',
-              display: 'grid',
-              placeItems: 'center',
               overflow: 'hidden',
+              '& img': { transition: 'transform 260ms ease' },
+              '&:hover img': { transform: 'scale(1.035)' },
             }}
           >
             {product.imageUrl ? (
@@ -51,23 +68,36 @@ export default function ProductCard({ product }) {
                 sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
-              <CoffeeOutlinedIcon aria-hidden="true" sx={{ fontSize: 58, color: 'primary.light' }} />
+              <Box sx={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: 'linear-gradient(145deg, #f1e7da, #e2cfbb)' }}>
+                <CoffeeOutlinedIcon aria-hidden="true" sx={{ fontSize: 64, color: 'primary.light' }} />
+              </Box>
+            )}
+            {(product.is_best_seller || product.is_featured) && (
+              <Chip
+                size="small"
+                label={product.is_best_seller ? 'Best seller' : 'Featured'}
+                sx={{
+                  position: 'absolute',
+                  top: 12,
+                  left: 12,
+                  bgcolor: 'rgba(255,253,249,.94)',
+                  color: 'primary.dark',
+                  fontWeight: 700,
+                  boxShadow: '0 2px 8px rgba(40,28,21,.12)',
+                }}
+              />
             )}
           </Box>
-          <CardContent>
-            <Stack spacing={1}>
-              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-                {product.category?.name && (
-                  <Typography variant="caption" color="text.secondary">
-                    {product.category.name}
-                  </Typography>
-                )}
-                {product.is_best_seller && <Chip size="small" label="Best seller" />}
-                {!product.is_best_seller && product.is_featured && (
-                  <Chip size="small" label="Featured" />
-                )}
-              </Stack>
-              <Typography variant="h6" component="h3">{product.name}</Typography>
+          <CardContent sx={{ px: 2.25, pt: 2.25, pb: 1.5 }}>
+            <Stack spacing={0.9}>
+              {product.category?.name && (
+                <Typography variant="overline" color="primary" sx={{ letterSpacing: '.12em', lineHeight: 1.4 }}>
+                  {product.category.name}
+                </Typography>
+              )}
+              <Typography variant="h6" component="h3" sx={{ fontWeight: 750, lineHeight: 1.25 }}>
+                {product.name}
+              </Typography>
               {product.description && (
                 <Typography
                   variant="body2"
@@ -77,19 +107,27 @@ export default function ProductCard({ product }) {
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
                     overflow: 'hidden',
+                    minHeight: '2.8em',
+                    lineHeight: 1.4,
                   }}
                 >
                   {product.description}
                 </Typography>
               )}
-              <Typography variant="body2" color="primary.dark" fontWeight={700}>
+              <Typography variant="body1" color="primary.dark" fontWeight={800} sx={{ pt: 0.25 }}>
                 {product.variants.length ? `From ${formatPrice(lowestPrice)}` : formatPrice(lowestPrice)}
               </Typography>
             </Stack>
           </CardContent>
         </CardActionArea>
-        <CardContent sx={{ pt: 0 }}>
-          <Button variant="contained" fullWidth onClick={() => setIsOptionsOpen(true)}>
+        <CardContent sx={{ px: 2.25, pt: 0, pb: 2.25 }}>
+          <Button
+            variant="contained"
+            fullWidth
+            startIcon={<AddShoppingCartOutlinedIcon />}
+            onClick={() => setIsOptionsOpen(true)}
+            sx={{ minHeight: 44, borderRadius: 2 }}
+          >
             Add to cart
           </Button>
         </CardContent>

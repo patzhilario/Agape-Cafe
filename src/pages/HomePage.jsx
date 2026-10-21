@@ -16,6 +16,9 @@ import {
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import {
   formatPrice,
+  getCachedPublicBranches,
+  getCachedPublicProducts,
+  getCachedPublicPromotions,
   getPublicBranches,
   getPublicProducts,
   getPublicPromotions,
@@ -80,10 +83,17 @@ function PromotionCard({ promotion }) {
 }
 
 export default function HomePage() {
-  const [featuredProducts, setFeaturedProducts] = useState([])
-  const [branches, setBranches] = useState([])
-  const [promotions, setPromotions] = useState([])
-  const [isLoading, setIsLoading] = useState(hasSupabaseConfig)
+  const cachedProducts = getCachedPublicProducts({ featured: true, limit: 4 })
+  const cachedBranches = getCachedPublicBranches()
+  const cachedPromotions = getCachedPublicPromotions()
+  const hasCachedHomeData =
+    cachedProducts !== undefined &&
+    cachedBranches !== undefined &&
+    cachedPromotions !== undefined
+  const [featuredProducts, setFeaturedProducts] = useState(cachedProducts || [])
+  const [branches, setBranches] = useState(cachedBranches || [])
+  const [promotions, setPromotions] = useState(cachedPromotions || [])
+  const [isLoading, setIsLoading] = useState(hasSupabaseConfig && !hasCachedHomeData)
   const [errorMessage, setErrorMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -352,6 +362,7 @@ export default function HomePage() {
                   elevation={0}
                   sx={{
                     position: 'absolute',
+                    zIndex: 2,
                     left: { xs: 14, sm: 20 },
                     right: { xs: 14, sm: 20 },
                     bottom: { xs: 14, sm: 20 },
@@ -453,41 +464,59 @@ export default function HomePage() {
             )}
           </Box>
 
-          <Paper
-            variant="outlined"
+          <Box
+            component="section"
+            aria-labelledby="home-about-heading"
             sx={{
-              p: { xs: 3, md: 5 },
-              bgcolor: 'primary.dark',
-              color: 'primary.contrastText',
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: '.8fr 1.2fr' },
+              gap: { xs: 2, md: 8 },
+              alignItems: 'center',
+              py: { xs: 4, md: 5 },
+              borderTop: '1px solid rgba(67, 48, 34, 0.2)',
+              borderBottom: '1px solid rgba(67, 48, 34, 0.2)',
             }}
           >
+            <Box>
+              <Typography variant="overline" color="primary" sx={{ letterSpacing: '.16em' }}>
+                A LITTLE MORE ABOUT US
+              </Typography>
+              <Typography
+                id="home-about-heading"
+                component="h2"
+                sx={{
+                  mt: 0.75,
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontSize: { xs: '2rem', md: '2.65rem' },
+                  fontWeight: 400,
+                  letterSpacing: '-.04em',
+                  lineHeight: 1.1,
+                }}
+              >
+                Get to know Agapé Café
+              </Typography>
+            </Box>
             <Stack
-              direction={{ xs: 'column', md: 'row' }}
-              spacing={3}
-              sx={{
-                alignItems: { xs: 'flex-start', md: 'center' },
-                justifyContent: 'space-between',
-              }}
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={2}
+              sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
             >
-              <Box>
-                <Typography variant="overline" sx={{ letterSpacing: '.15em', opacity: 0.8 }}>
-                  Made for your coffee moment
-                </Typography>
-                <Typography variant="h2" color="inherit">
-                  Get to know Agapé Café
-                </Typography>
-              </Box>
+              <Typography color="text.secondary" sx={{ maxWidth: 470, lineHeight: 1.8 }}>
+                Learn the meaning behind our name and the idea that inspires
+                the way we welcome you.
+              </Typography>
               <Button
                 component={RouterLink}
                 to="/about"
-                variant="outlined"
-                color="inherit"
+                variant="text"
+                color="primary"
                 endIcon={<ArrowForwardIcon />}
+                sx={{ alignSelf: { xs: 'flex-start', sm: 'center' }, whiteSpace: 'nowrap' }}
               >
-                About the café
+                Our story
               </Button>
             </Stack>
-          </Paper>
+          </Box>
 
           <Box>
             <SectionHeading

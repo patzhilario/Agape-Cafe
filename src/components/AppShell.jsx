@@ -9,6 +9,7 @@ import { useCart } from '../features/orders/useCart.js'
 import CartSummaryPanel from './public/CartSummaryPanel.jsx'
 
 const logo = new URL('../assets/logo.jpg', import.meta.url).href
+const currentYear = new Date().getFullYear()
 
 const navigation = [
   { label: 'Home', to: '/' },
@@ -87,8 +88,8 @@ export default function AppShell({ children }) {
             </Box>
             {!isMobile && <Stack
               direction="row"
-              spacing={0.5}
-              sx={{ ml: 'auto', minWidth: 0, overflowX: 'auto' }}
+              spacing={1.25}
+              sx={{ ml: 'auto', minWidth: 0, alignItems: 'center', overflowX: 'auto' }}
             >
               {navigation.map(({ label, to }) => (
                 <Button
@@ -97,7 +98,15 @@ export default function AppShell({ children }) {
                   to={to}
                   color="inherit"
                   size="small"
-                  sx={{ whiteSpace: 'nowrap' }}
+                  sx={{
+                    minHeight: 40,
+                    px: 1.5,
+                    borderRadius: 2,
+                    fontWeight: location.pathname === to ? 700 : 500,
+                    bgcolor: location.pathname === to ? 'action.selected' : 'transparent',
+                    whiteSpace: 'nowrap',
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
                 >
                   {label}
                 </Button>
@@ -109,7 +118,7 @@ export default function AppShell({ children }) {
                     to={account.homePath}
                     color="primary"
                     size="small"
-                    sx={{ whiteSpace: 'nowrap' }}
+                    sx={{ minHeight: 40, px: 1.5, whiteSpace: 'nowrap' }}
                   >
                     {account.roles.some((role) => ['super_admin', 'branch_admin', 'staff'].includes(role))
                       ? 'Admin workspace'
@@ -119,7 +128,7 @@ export default function AppShell({ children }) {
                     color="inherit"
                     size="small"
                     onClick={handleSignOut}
-                    sx={{ whiteSpace: 'nowrap' }}
+                    sx={{ minHeight: 40, px: 1.5, whiteSpace: 'nowrap' }}
                   >
                     Sign out
                   </Button>
@@ -133,6 +142,9 @@ export default function AppShell({ children }) {
                   disabled={isLoading}
                   variant="outlined"
                   sx={{
+                    minHeight: 40,
+                    px: 2,
+                    ml: 0.75,
                     whiteSpace: 'nowrap',
                     borderWidth: 1.5,
                     '&:hover': { borderWidth: 1.5, bgcolor: 'rgba(91, 57, 39, 0.06)' },
@@ -148,8 +160,9 @@ export default function AppShell({ children }) {
                 aria-haspopup="dialog"
                 aria-expanded={isCartOpen}
                 sx={{
-                  width: 40,
-                  height: 40,
+                  width: 42,
+                  height: 42,
+                  ml: 0.75,
                   border: 1,
                   borderColor: 'divider',
                 }}
@@ -265,25 +278,58 @@ export default function AppShell({ children }) {
       <Box component="main" sx={{ flex: 1 }}>
         {children}
       </Box>
-      <Box component="footer" sx={{ py: 3, borderTop: 1, borderColor: 'divider' }}>
+      <Box
+        component="footer"
+        sx={{
+          py: { xs: 2.5, sm: 3 },
+          mt: 'auto',
+          bgcolor: '#30231c',
+          color: '#fffaf4',
+        }}
+      >
         <Container maxWidth="lg">
-          <Typography variant="body2" color="text.secondary">
-            Agapé Café · Coffee shop management system
-          </Typography>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.5}
+            sx={{ alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between' }}
+          >
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+              <Box
+                component="img"
+                src={logo}
+                alt=""
+                sx={{ width: 38, height: 38, objectFit: 'cover', borderRadius: '50%' }}
+              />
+              <Box>
+                <Typography fontWeight={700}>Agapé Café</Typography>
+                <Typography variant="body2" sx={{ color: 'rgba(255,250,244,.76)' }}>
+                  A little love in every cup.
+                </Typography>
+              </Box>
+            </Stack>
+            <Typography variant="caption" sx={{ color: 'rgba(255,250,244,.68)' }}>
+              © {currentYear} Agapé Café. Made with love.
+            </Typography>
+          </Stack>
         </Container>
       </Box>
       <Drawer
         anchor="right"
         open={isCartOpen}
         onClose={closeCart}
-        slotProps={{ paper: { sx: { width: { xs: '100vw', sm: 360 }, p: 2 } } }}
+        slotProps={{
+          paper: {
+            sx: {
+              width: { xs: '100vw', sm: 420, md: 460 },
+              maxWidth: '100vw',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            },
+          },
+        }}
       >
-        <Stack direction="row" sx={{ justifyContent: 'flex-end', mb: 1 }}>
-          <IconButton aria-label="Close cart" onClick={closeCart}>
-            <CloseIcon />
-          </IconButton>
-        </Stack>
-        <CartSummaryPanel onCheckout={closeCart} />
+        <CartSummaryPanel onCheckout={closeCart} onClose={closeCart} />
       </Drawer>
       <Snackbar
         open={Boolean(signOutError)}

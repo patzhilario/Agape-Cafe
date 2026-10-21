@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Container, Stack, Typography } from '@mui/material'
-import { getPublicBranches } from '../features/public/publicData.js'
+import { getCachedPublicBranches, getPublicBranches } from '../features/public/publicData.js'
 import BranchCards from '../components/public/BranchCards.jsx'
 import {
   PublicDataError,
@@ -13,8 +13,9 @@ const hasSupabaseConfig =
   Boolean(import.meta.env.VITE_SUPABASE_ANON_KEY)
 
 export default function ContactPage() {
-  const [branches, setBranches] = useState([])
-  const [isLoading, setIsLoading] = useState(hasSupabaseConfig)
+  const cachedBranches = getCachedPublicBranches()
+  const [branches, setBranches] = useState(cachedBranches || [])
+  const [isLoading, setIsLoading] = useState(hasSupabaseConfig && cachedBranches === undefined)
   const [errorMessage, setErrorMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
 

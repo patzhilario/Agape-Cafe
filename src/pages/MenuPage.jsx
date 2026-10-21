@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Alert,
+  Avatar,
   Box,
   Chip,
   Container,
@@ -17,7 +18,15 @@ import {
 } from '@mui/material'
 import InputAdornment from '@mui/material/InputAdornment'
 import SearchIcon from '@mui/icons-material/Search'
-import { getPublicBranches, getPublicCategories, getPublicProducts } from '../features/public/publicData.js'
+import CoffeeOutlinedIcon from '@mui/icons-material/CoffeeOutlined'
+import {
+  getCachedPublicBranches,
+  getCachedPublicCategories,
+  getCachedPublicProducts,
+  getPublicBranches,
+  getPublicCategories,
+  getPublicProducts,
+} from '../features/public/publicData.js'
 import ProductGrid from '../components/public/ProductGrid.jsx'
 import { useCart } from '../features/orders/useCart.js'
 import {
@@ -33,13 +42,16 @@ const hasSupabaseConfig =
 
 export default function MenuPage() {
   const { branchId, setBranchId } = useCart()
-  const [products, setProducts] = useState([])
-  const [categories, setCategories] = useState([])
-  const [branches, setBranches] = useState([])
+  const cachedProducts = getCachedPublicProducts({ branchId: branchId || undefined })
+  const cachedCategories = getCachedPublicCategories()
+  const cachedBranches = getCachedPublicBranches()
+  const [products, setProducts] = useState(cachedProducts || [])
+  const [categories, setCategories] = useState(cachedCategories || [])
+  const [branches, setBranches] = useState(cachedBranches || [])
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [search, setSearch] = useState('')
   const [sortOrder, setSortOrder] = useState('featured')
-  const [isLoading, setIsLoading] = useState(hasSupabaseConfig)
+  const [isLoading, setIsLoading] = useState(hasSupabaseConfig && cachedProducts === undefined)
   const [errorMessage, setErrorMessage] = useState('')
   const [filterError, setFilterError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -128,18 +140,93 @@ export default function MenuPage() {
   })
 
   return (
-    <Box sx={{ minHeight: '70vh', bgcolor: 'background.default' }}>
-      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
-        <Stack spacing={{ xs: 2.5, md: 3 }}>
-          <Box>
-            <Typography variant="overline" color="primary" sx={{ letterSpacing: '.12em' }}>
-              A LITTLE SOMETHING FOR YOU
-            </Typography>
-            <Typography variant="h2">Find your favorite</Typography>
-            <Typography color="text.secondary" sx={{ mt: 0.75 }}>
-              Browse the menu and make your next coffee moment yours.
-            </Typography>
+    <Box sx={{ minHeight: '70vh', bgcolor: '#f7f3ed', color: '#2c211b' }}>
+      <Box
+        component="header"
+        sx={{
+          position: 'relative',
+          overflow: 'hidden',
+          bgcolor: '#eee5d9',
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            width: { xs: 210, md: 360 },
+            height: { xs: 210, md: 360 },
+            top: { xs: -90, md: -160 },
+            right: { xs: -100, md: '8%' },
+            border: '1px solid rgba(91,57,39,.12)',
+            borderRadius: '50%',
+            boxShadow: '0 0 0 28px rgba(91,57,39,.035), 0 0 0 65px rgba(91,57,39,.025)',
+            pointerEvents: 'none',
+          },
+        }}
+      >
+        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: '1.2fr .8fr' },
+              gap: { xs: 3, md: 7 },
+              alignItems: 'center',
+              py: { xs: 5, md: 8 },
+            }}
+          >
+            <Stack spacing={{ xs: 1.5, md: 2 }}>
+              <Typography variant="overline" color="primary" sx={{ letterSpacing: '.2em' }}>
+                THE AGAPÉ MENU
+              </Typography>
+              <Typography
+                component="h1"
+                sx={{
+                  maxWidth: 690,
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontSize: { xs: 'clamp(2.8rem, 12vw, 4rem)', md: '5.25rem' },
+                  fontWeight: 400,
+                  letterSpacing: '-.055em',
+                  lineHeight: '.98',
+                }}
+              >
+                A good day starts with a good cup.
+              </Typography>
+              <Typography sx={{ maxWidth: 520, color: '#685c53', lineHeight: 1.8 }}>
+                Find a familiar favorite or something new to make your moment.
+                Browse the menu and choose what sounds good today.
+              </Typography>
+            </Stack>
+            <Stack
+              direction="row"
+              spacing={2}
+              sx={{
+                alignItems: 'center',
+                justifyContent: { md: 'flex-end' },
+                borderTop: { xs: '1px solid rgba(91,57,39,.16)', md: 0 },
+                pt: { xs: 2, md: 0 },
+              }}
+            >
+              <Avatar
+                sx={{
+                  width: { xs: 58, md: 76 },
+                  height: { xs: 58, md: 76 },
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText',
+                }}
+              >
+                <CoffeeOutlinedIcon sx={{ fontSize: { xs: 30, md: 38 } }} />
+              </Avatar>
+              <Box>
+                <Typography variant="overline" color="primary" sx={{ letterSpacing: '.15em' }}>
+                  MADE FOR YOUR MOMENT
+                </Typography>
+                <Typography sx={{ color: '#685c53', maxWidth: 260, lineHeight: 1.6 }}>
+                  Coffee, treats, and little comforts to enjoy your way.
+                </Typography>
+              </Box>
+            </Stack>
           </Box>
+        </Container>
+      </Box>
+      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+        <Stack spacing={{ xs: 2.5, md: 3 }}>
         {!hasSupabaseConfig && <SupabaseSetupNotice />}
         {filterError && <PublicDataError message={filterError} />}
         {errorMessage && (
@@ -151,14 +238,24 @@ export default function MenuPage() {
             }}
           />
         )}
-        <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 }, borderRadius: 3 }}>
-          <Stack spacing={1.5}>
+        <Paper
+          variant="outlined"
+          sx={{
+            p: { xs: 1.5, sm: 2 },
+            borderRadius: 3,
+            bgcolor: 'rgba(255,255,255,.82)',
+            borderColor: 'rgba(67,48,34,.14)',
+            boxShadow: '0 10px 30px rgba(57,35,23,.035)',
+          }}
+        >
+          <Stack spacing={1.75}>
             <TextField
               fullWidth
-              size="small"
+              size="medium"
               placeholder="Search drinks and treats..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              sx={{ '& .MuiOutlinedInput-root': { bgcolor: '#fff', borderRadius: 2.5 } }}
               slotProps={{
                 htmlInput: { 'aria-label': 'Search products by name or description' },
                 input: {
@@ -172,7 +269,7 @@ export default function MenuPage() {
             />
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
-              spacing={1.5}
+              spacing={1.25}
               useFlexGap
               sx={{ alignItems: { sm: 'center' }, flexWrap: 'wrap' }}
             >
@@ -183,8 +280,17 @@ export default function MenuPage() {
                   value={selectedBranch}
                   label="Branch availability"
                   onChange={(event) => {
-                    setIsLoading(true)
-                    setBranchId(event.target.value)
+                    const nextBranchId = event.target.value
+                    const nextProducts = getCachedPublicProducts({
+                      branchId: nextBranchId || undefined,
+                    })
+                    if (nextProducts !== undefined) {
+                      setProducts(nextProducts)
+                      setIsLoading(false)
+                    } else {
+                      setIsLoading(true)
+                    }
+                    setBranchId(nextBranchId)
                   }}
                 >
                   <MenuItem value="">All published products</MenuItem>
@@ -208,12 +314,16 @@ export default function MenuPage() {
                 </Select>
               </FormControl>
               <Box sx={{ flex: 1 }} />
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`${sortedProducts.length} ${sortedProducts.length === 1 ? 'item' : 'items'}`}
-                sx={{ alignSelf: { xs: 'flex-start', sm: 'center' } }}
-              />
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ ml: { sm: 'auto' }, alignSelf: { xs: 'flex-start', sm: 'center' }, px: 0.5 }}
+              >
+                <Box component="span" sx={{ color: 'primary.dark', fontWeight: 800 }}>
+                  {sortedProducts.length}
+                </Box>
+                {' '}{sortedProducts.length === 1 ? 'item' : 'items'}
+              </Typography>
             </Stack>
           </Stack>
         </Paper>
@@ -225,13 +335,26 @@ export default function MenuPage() {
           allowScrollButtonsMobile
           aria-label="Browse menu categories"
           sx={{
-            minHeight: 48,
-            borderBottom: 1,
-            borderColor: 'divider',
+            minHeight: 44,
+            borderBottom: '1px solid rgba(67,48,34,.16)',
+            '& .MuiTabs-flexContainer': { gap: { xs: 1, sm: 2 } },
+            '& .MuiTabs-indicator': {
+              height: 2,
+              borderRadius: 2,
+              bgcolor: 'primary.dark',
+            },
             '& .MuiTab-root': {
-              minHeight: 48,
-              px: { xs: 1.5, sm: 2.5 },
+              minHeight: 46,
+              minWidth: 'auto',
+              px: { xs: 1, sm: 1.5 },
+              color: 'text.secondary',
               fontWeight: 700,
+              textTransform: 'none',
+              transition: 'color 150ms ease',
+              '&.Mui-selected': {
+                color: 'primary.dark',
+              },
+              '&:hover': { color: 'primary.main', bgcolor: 'transparent' },
             },
           }}
         >
@@ -249,7 +372,27 @@ export default function MenuPage() {
         {!hasSupabaseConfig ? null : isLoading ? (
           <PublicLoading label="Loading the menu…" />
         ) : visibleProducts.length ? (
-          <ProductGrid products={sortedProducts} />
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
+              <Typography
+                component="h2"
+                sx={{
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontSize: { xs: '1.8rem', md: '2.25rem' },
+                  fontWeight: 400,
+                  letterSpacing: '-.035em',
+                }}
+              >
+                {selectedCategory === 'all'
+                  ? 'Explore the menu'
+                  : categories.find((category) => category.slug === selectedCategory)?.name}
+              </Typography>
+              {sortOrder === 'popular' && (
+                <Chip size="small" variant="outlined" label="Best sellers first" />
+              )}
+            </Box>
+            <ProductGrid products={sortedProducts} />
+          </Stack>
         ) : (
           <EmptyPublicState>
             {products.length

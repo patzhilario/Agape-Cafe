@@ -2,13 +2,10 @@ import { useState } from 'react'
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   Stack,
   Typography,
 } from '@mui/material'
@@ -57,128 +54,104 @@ function BranchCard({ branch }) {
 
   return (
     <>
-      <Card
-        variant="outlined"
+      <Box
+        component="article"
         sx={{
-          height: '100%',
-          overflow: 'hidden',
-          borderColor: 'rgba(67, 48, 34, 0.12)',
-          borderRadius: 4,
-          transition: 'transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease',
-          '&:hover': {
-            transform: 'translateY(-4px)',
-            borderColor: 'primary.light',
-            boxShadow: '0 14px 36px rgba(57, 35, 23, 0.10)',
-          },
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(220px, .8fr) minmax(0, 1.2fr) auto' },
+          gap: { xs: 2, md: 4 },
+          alignItems: 'center',
+          py: { xs: 3, md: 4 },
+          borderTop: '1px solid rgba(67, 48, 34, 0.18)',
+          '&:last-of-type': { borderBottom: '1px solid rgba(67, 48, 34, 0.18)' },
         }}
       >
-        <Box
-          sx={{
-            px: { xs: 2.5, sm: 3 },
-            py: 2.5,
-            background: 'linear-gradient(135deg, #f5eadc 0%, #fffaf3 100%)',
-            borderBottom: 1,
-            borderColor: 'divider',
-          }}
-        >
-          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-            <Box
-              sx={{
-                width: 46,
-                height: 46,
-                flexShrink: 0,
-                display: 'grid',
-                placeItems: 'center',
-                borderRadius: 3,
-                bgcolor: 'primary.main',
-                color: 'primary.contrastText',
-              }}
-            >
-              <PlaceOutlinedIcon />
-            </Box>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="overline" color="primary" sx={{ letterSpacing: '.12em', lineHeight: 1.6 }}>
-                VISIT AGAPÉ CAFÉ
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 750, lineHeight: 1.25 }}>
-                {branch.name}
-              </Typography>
-            </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', mb: 1 }}>
+            <PlaceOutlinedIcon color="primary" fontSize="small" />
+            <Typography variant="overline" color="primary" sx={{ letterSpacing: '.14em' }}>
+              AGAPÉ CAFÉ · LOCATION
+            </Typography>
           </Stack>
+          <Typography
+            component="h2"
+            sx={{
+              fontFamily: 'Georgia, "Times New Roman", serif',
+              fontSize: { xs: '1.7rem', md: '2rem' },
+              fontWeight: 400,
+              letterSpacing: '-.03em',
+              lineHeight: 1.2,
+              overflowWrap: 'anywhere',
+            }}
+          >
+            {branch.name}
+          </Typography>
+          {branch.address && (
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', mt: 1.25 }}>
+              <PlaceOutlinedIcon color="action" fontSize="small" sx={{ mt: 0.2 }} />
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65 }}>
+                {branch.address}
+              </Typography>
+            </Stack>
+          )}
         </Box>
-        <CardContent sx={{ p: { xs: 2.5, sm: 3 }, '&:last-child': { pb: 3 } }}>
-          <Stack spacing={2} sx={{ height: '100%' }}>
-            {branch.address && (
-              <Box
+        <Stack spacing={1.5} sx={{ minWidth: 0 }}>
+          {hours && (
+            <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
+              <AccessTimeOutlinedIcon color="primary" fontSize="small" sx={{ mt: 0.25 }} />
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                {hours}
+              </Typography>
+            </Stack>
+          )}
+          {branch.phone && (
+            <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
+              <LocalPhoneOutlinedIcon color="primary" fontSize="small" />
+              <Typography
+                component="a"
+                href={`tel:${branch.phone}`}
+                variant="body2"
+                color="text.primary"
+                sx={{ textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
+              >
+                {branch.phone}
+              </Typography>
+            </Stack>
+          )}
+          {branch.email && (
+            <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', minWidth: 0 }}>
+              <EmailOutlinedIcon color="primary" fontSize="small" />
+              <Typography
+                component="a"
+                href={`mailto:${branch.email}`}
+                variant="body2"
+                color="text.primary"
                 sx={{
-                  display: 'flex',
-                  gap: 1.25,
-                  alignItems: 'flex-start',
-                  p: 1.5,
-                  borderRadius: 2.5,
-                  bgcolor: 'action.hover',
+                  minWidth: 0,
+                  overflowWrap: 'anywhere',
+                  textDecoration: 'none',
+                  '&:hover': { color: 'primary.main' },
                 }}
               >
-                <PlaceOutlinedIcon color="primary" fontSize="small" sx={{ mt: 0.2 }} />
-                <Typography variant="body2" sx={{ lineHeight: 1.6 }}>
-                  {branch.address}
-                </Typography>
-              </Box>
-            )}
-            <Stack spacing={1.5} sx={{ px: 0.5 }}>
-              {hours && (
-                <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
-                  <AccessTimeOutlinedIcon color="primary" fontSize="small" sx={{ mt: 0.25 }} />
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>{hours}</Typography>
-                </Stack>
-              )}
-              {branch.phone && (
-                <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
-                  <LocalPhoneOutlinedIcon color="primary" fontSize="small" />
-                  <Typography
-                    component="a"
-                    href={`tel:${branch.phone}`}
-                    variant="body2"
-                    color="text.primary"
-                    sx={{ textDecoration: 'none', '&:hover': { color: 'primary.main' }, lineHeight: 1.6 }}
-                  >
-                    {branch.phone}
-                  </Typography>
-                </Stack>
-              )}
-              {branch.email && (
-                <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', minWidth: 0 }}>
-                  <EmailOutlinedIcon color="primary" fontSize="small" />
-                  <Typography
-                    component="a"
-                    href={`mailto:${branch.email}`}
-                    variant="body2"
-                    color="text.primary"
-                    sx={{
-                      minWidth: 0,
-                      overflowWrap: 'anywhere',
-                      textDecoration: 'none',
-                      '&:hover': { color: 'primary.main' },
-                    }}
-                  >
-                    {branch.email}
-                  </Typography>
-                </Stack>
-              )}
+                {branch.email}
+              </Typography>
             </Stack>
-            <Box sx={{ flex: 1 }} />
-            <Divider sx={{ mt: 0.5 }} />
-            <Button
-              variant="contained"
-              startIcon={<PlaceOutlinedIcon />}
-              onClick={() => setMapOpen(true)}
-              sx={{ alignSelf: 'stretch', minHeight: 42, borderRadius: 2 }}
-            >
-              View location
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
+          )}
+          {!hours && !branch.phone && !branch.email && (
+            <Typography variant="body2" color="text.secondary">
+              Contact details are not available for this location.
+            </Typography>
+          )}
+        </Stack>
+        <Button
+          variant="outlined"
+          endIcon={<OpenInNewIcon />}
+          onClick={() => setMapOpen(true)}
+          sx={{ minHeight: 42, justifySelf: { md: 'end' }, whiteSpace: 'nowrap' }}
+        >
+          View on map
+        </Button>
+      </Box>
       <Dialog
         open={mapOpen}
         onClose={() => setMapOpen(false)}
@@ -230,13 +203,7 @@ export default function BranchCards({ branches }) {
   }
 
   return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, 1fr)' },
-        gap: 2,
-      }}
-    >
+    <Box>
       {branches.map((branch) => (
         <BranchCard key={branch.id} branch={branch} />
       ))}
