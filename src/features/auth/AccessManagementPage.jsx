@@ -29,6 +29,9 @@ import {
 } from '@mui/material'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
 import { useAuth } from './useAuth.js'
+import PaginationControls from '../../components/PaginationControls.jsx'
+
+const DEFAULT_ACCOUNT_PAGE_SIZE = 10
 
 const roles = [
   { value: 'customer', label: 'Customer' },
@@ -66,6 +69,10 @@ export default function AccessManagementPage() {
   const [accessDialogOpen, setAccessDialogOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [accountPage, setAccountPage] = useState(0)
+  const [accountPageSize, setAccountPageSize] = useState(DEFAULT_ACCOUNT_PAGE_SIZE)
+  const [accountSearch, setAccountSearch] = useState('')
+  const [accountRoleFilter, setAccountRoleFilter] = useState('')
   const selectedUserIdRef = useRef(selectedUserId)
 
   useEffect(() => {
@@ -127,7 +134,7 @@ export default function AccessManagementPage() {
       }
       return true
     } catch (error) {
-      console.error('Unable to load staff access settings.', error)
+      console.error('Unable to load account management data.', error)
       if (isCurrent()) {
         setErrorMessage(
           'Access settings could not be loaded. Confirm the Phase 1 and Phase 2 migrations are applied.',
@@ -148,6 +155,21 @@ export default function AccessManagementPage() {
   }, [loadAccessData])
 
   const selectedUser = users.find((user) => user.id === selectedUserId)
+  const filteredUsers = useMemo(() => {
+    const query = accountSearch.trim().toLowerCase()
+    return users.filter((user) => {
+      const role = userRoles.find((userRole) => userRole.user_id === user.id)?.role || 'customer'
+      const matchesSearch =
+        !query ||
+        user.display_name?.toLowerCase().includes(query) ||
+        user.email?.toLowerCase().includes(query)
+      return matchesSearch && (!accountRoleFilter || role === accountRoleFilter)
+    })
+  }, [accountRoleFilter, accountSearch, userRoles, users])
+  const pageUsers = filteredUsers.slice(
+    accountPage * accountPageSize,
+    (accountPage + 1) * accountPageSize,
+  )
   const currentRoles = userRoles
     .filter((userRole) => userRole.user_id === selectedUserId)
     .map((userRole) => userRole.role)
@@ -226,7 +248,7 @@ export default function AccessManagementPage() {
       )
       setAccessDialogOpen(false)
     } catch (error) {
-      console.error('Unable to save staff access settings.', error)
+      console.error('Unable to save account access settings.', error)
       setIsLoading(false)
       setErrorMessage(
         error.message === 'You cannot change your own account access.'
@@ -305,10 +327,10 @@ export default function AccessManagementPage() {
           <Typography variant="overline" color="primary">
             Agapé Café · Super Admin
           </Typography>
-          <Typography variant="h2">Account access</Typography>
+          <Typography variant="h2">Account Management</Typography>
           <Typography color="text.secondary">
-            Assign a role, branch scope, and module actions. Changes are
-            applied atomically and written to the audit trail.
+            Manage customer and staff accounts, assign roles, branch scope, and
+            module actions. Changes are applied atomically and written to the audit trail.
           </Typography>
         </Box>
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
@@ -477,60 +499,105 @@ export default function AccessManagementPage() {
           </Alert>
         ) : (
           <>
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small" aria-label="Accounts and access" sx={{ minWidth: 750 }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Email</TableCell>
-                    <TableCell>Role</TableCell>
-                    <TableCell>Branches</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="right">Action</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {users.map((user) => {
-                    const role = userRoles.find((userRole) => userRole.user_id === user.id)?.role || 'customer'
-                    const branchNames = assignments
-                      .filter((assignment) => assignment.user_id === user.id)
-                      .map((assignment) => branches.find((branch) => branch.id === assignment.branch_id)?.name)
-                      .filter(Boolean)
-                    return (
-                      <TableRow key={user.id} hover>
-                        <TableCell sx={{ fontWeight: 700 }}>{user.display_name || '—'}</TableCell>
-                        <TableCell>{user.email || '—'}</TableCell>
-                        <TableCell>{roles.find((item) => item.value === role)?.label || role}</TableCell>
-                        <TableCell>{branchNames.join(', ') || 'All / none'}</TableCell>
-                        <TableCell>{user.is_active ? 'Active' : 'Deactivated'}</TableCell>
-                        <TableCell align="right">
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            disabled={user.id === account.id}
-                            onClick={() => {
-                              setSelectedUserId(user.id)
-                              setSelectedRole(role)
-                              setSelectedBranches(assignments
-                                .filter((assignment) => assignment.user_id === user.id)
-                                .map((assignment) => assignment.branch_id))
-                              setSelectedPermissions([...new Set(userPermissions
-                                .filter((permission) => permission.user_id === user.id)
-                                .map((permission) => permission.permission_id))])
-                              setErrorMessage('')
-                              setSuccessMessage('')
-                              setAccessDialogOpen(true)
-                            }}
-                          >
-                            Edit access
-                          </Button>
-                        </TableCell>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Search by name or email"
+                value={accountSearch}
+                onChange={(event) => {
+                  setAccountSearch(event.target.value)
+                  setAccountPage(0)
+                }}
+              />
+              <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 190 } }}>
+                <InputLabel id="account-role-filter-label">Filter by role</InputLabel>
+                <Select
+                  labelId="account-role-filter-label"
+                  label="Filter by role"
+                  value={accountRoleFilter}
+                  onChange={(event) => {
+                    setAccountRoleFilter(event.target.value)
+                    setAccountPage(0)
+                  }}
+                >
+                  <MenuItem value="">All roles</MenuItem>
+                  {roles.map((role) => (
+                    <MenuItem key={role.value} value={role.value}>{role.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Stack>
+            {filteredUsers.length ? (
+              <>
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small" aria-label="Accounts and access" sx={{ minWidth: 750 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Email</TableCell>
+                        <TableCell>Role</TableCell>
+                        <TableCell>Branches</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="right">Action</TableCell>
                       </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {pageUsers.map((user) => {
+                        const role = userRoles.find((userRole) => userRole.user_id === user.id)?.role || 'customer'
+                        const branchNames = assignments
+                          .filter((assignment) => assignment.user_id === user.id)
+                          .map((assignment) => branches.find((branch) => branch.id === assignment.branch_id)?.name)
+                          .filter(Boolean)
+                        return (
+                          <TableRow key={user.id} hover>
+                            <TableCell sx={{ fontWeight: 700 }}>{user.display_name || '—'}</TableCell>
+                            <TableCell>{user.email || '—'}</TableCell>
+                            <TableCell>{roles.find((item) => item.value === role)?.label || role}</TableCell>
+                            <TableCell>{branchNames.join(', ') || 'All / none'}</TableCell>
+                            <TableCell>{user.is_active ? 'Active' : 'Deactivated'}</TableCell>
+                            <TableCell align="right">
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                disabled={user.id === account.id}
+                                onClick={() => {
+                                  setSelectedUserId(user.id)
+                                  setSelectedRole(role)
+                                  setSelectedBranches(assignments
+                                    .filter((assignment) => assignment.user_id === user.id)
+                                    .map((assignment) => assignment.branch_id))
+                                  setSelectedPermissions([...new Set(userPermissions
+                                    .filter((permission) => permission.user_id === user.id)
+                                    .map((permission) => permission.permission_id))])
+                                  setErrorMessage('')
+                                  setSuccessMessage('')
+                                  setAccessDialogOpen(true)
+                                }}
+                              >
+                                Edit access
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <PaginationControls
+                  page={accountPage}
+                  pageSize={accountPageSize}
+                  hasNextPage={(accountPage + 1) * accountPageSize < filteredUsers.length}
+                  isLoading={isLoading}
+                  onChange={(nextPage, nextPageSize) => {
+                    setAccountPage(nextPage)
+                    setAccountPageSize(nextPageSize)
+                  }}
+                />
+              </>
+            ) : (
+              <Alert severity="info">No accounts match these filters.</Alert>
+            )}
             <Dialog open={accessDialogOpen} onClose={() => !isSaving && setAccessDialogOpen(false)} fullWidth maxWidth="md">
               <DialogTitle>Edit account access{selectedUser?.email ? ` · ${selectedUser.email}` : ''}</DialogTitle>
               <DialogContent dividers>

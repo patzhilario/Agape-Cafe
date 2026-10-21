@@ -1,8 +1,6 @@
 import {
   Box,
-  FormControl,
-  IconButton,
-  InputLabel,
+  Button,
   MenuItem,
   Select,
   Stack,
@@ -13,65 +11,86 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 
 export default function PaginationControls({ page, pageSize, hasNextPage, isLoading, onChange }) {
   return (
-    <Stack
-      direction="row"
-      spacing={{ xs: 1, sm: 1.5 }}
+    <Box
+      component="nav"
+      aria-label="Pagination"
       sx={{
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexWrap: 'wrap',
-        py: 1,
+        mt: 0.75,
+        px: { xs: 1, sm: 1.5 },
+        py: 0.75,
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 2,
+        bgcolor: 'background.paper',
       }}
     >
-      <IconButton
-        size="small"
-        aria-label="Previous page"
-        disabled={isLoading || page === 0}
-        onClick={() => onChange(page - 1, pageSize)}
-        sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+        }}
       >
-        <ChevronLeftIcon fontSize="small" />
-      </IconButton>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Box
-          sx={{
-            px: 1.25,
-            py: 0.6,
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: 2,
-            bgcolor: 'background.paper',
-          }}
-        >
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Button
+            size="small"
+            variant="outlined"
+            aria-label="Previous page"
+            disabled={isLoading || page === 0}
+            onClick={() => onChange(page - 1, pageSize)}
+            sx={{ minWidth: 32, width: 32, height: 32, p: 0, borderRadius: 1.5 }}
+          >
+            <ChevronLeftIcon sx={{ fontSize: 18 }} />
+          </Button>
+          <Box
+            aria-current="page"
+            sx={{
+              minWidth: 54,
+              px: 0.75,
+              textAlign: 'center',
+            }}
+          >
+            <Typography variant="caption" fontWeight={700} sx={{ whiteSpace: 'nowrap' }}>
+              Page {page + 1}
+            </Typography>
+          </Box>
+          <Button
+            size="small"
+            variant="outlined"
+            aria-label="Next page"
+            disabled={isLoading || !hasNextPage}
+            onClick={() => onChange(page + 1, pageSize)}
+            sx={{ minWidth: 32, width: 32, height: 32, p: 0, borderRadius: 1.5 }}
+          >
+            <ChevronRightIcon sx={{ fontSize: 18 }} />
+          </Button>
+        </Stack>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
           <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-            Page <strong>{page + 1}</strong>
+            Rows
           </Typography>
-        </Box>
-        <FormControl size="small" sx={{ minWidth: 84 }}>
-          <InputLabel id="pagination-page-size-label">Rows</InputLabel>
           <Select
-            labelId="pagination-page-size-label"
-            label="Rows"
+            size="small"
             value={pageSize}
             disabled={isLoading}
+            inputProps={{ 'aria-label': 'Rows per page' }}
             onChange={(event) => onChange(0, Number(event.target.value))}
-            sx={{ borderRadius: 2, fontSize: '0.8125rem' }}
+            sx={{
+              minWidth: 64,
+              height: 32,
+              borderRadius: 1.5,
+              bgcolor: 'background.paper',
+              '& .MuiSelect-select': { py: 0.5, fontSize: '0.75rem' },
+            }}
           >
             {[10, 15, 20, 50].map((size) => (
               <MenuItem key={size} value={size}>{size}</MenuItem>
             ))}
           </Select>
-        </FormControl>
+        </Stack>
       </Stack>
-      <IconButton
-        size="small"
-        aria-label="Next page"
-        disabled={isLoading || !hasNextPage}
-        onClick={() => onChange(page + 1, pageSize)}
-        sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}
-      >
-        <ChevronRightIcon fontSize="small" />
-      </IconButton>
-    </Stack>
+    </Box>
   )
 }

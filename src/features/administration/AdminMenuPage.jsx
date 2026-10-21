@@ -33,6 +33,9 @@ import { getAdminBranches } from './adminData.js'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
 import { formatPrice, publicImageUrl } from '../public/publicData.js'
 import { optimizeProductImage } from '../../lib/imageOptimization.js'
+import PaginationControls from '../../components/PaginationControls.jsx'
+
+const DEFAULT_CATALOG_PAGE_SIZE = 10
 
 function AdminMenuPage() {
   const { account } = useAuth()
@@ -67,7 +70,13 @@ function AdminMenuPage() {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [editingProductId, setEditingProductId] = useState('')
   const [optionDialogType, setOptionDialogType] = useState('')
+  const [catalogPage, setCatalogPage] = useState(0)
+  const [catalogPageSize, setCatalogPageSize] = useState(DEFAULT_CATALOG_PAGE_SIZE)
   const editingProduct = products.find((product) => product.id === editingProductId)
+  const paginatedProducts = useMemo(
+    () => products.slice(catalogPage * catalogPageSize, (catalogPage + 1) * catalogPageSize),
+    [catalogPage, catalogPageSize, products],
+  )
 
   const canEditBranchMenu = isSuperAdmin || (
     account.branchAssignments.some((assignment) => assignment.branch_id === branchId) &&
@@ -331,6 +340,7 @@ function AdminMenuPage() {
       }
       setNewProduct({ name: '', sku: '', description: '', price: '', categoryId: '' })
       setProductDialogOpen(false)
+      setCatalogPage(0)
       setSuccessMessage('Product created as unpublished; publish it when its menu details are ready.')
       setCatalogReloadKey((value) => value + 1)
       setAvailabilityReloadKey((value) => value + 1)
@@ -529,7 +539,10 @@ function AdminMenuPage() {
         </FormControl>}
         <Tabs
           value={menuView}
-          onChange={(_, value) => setMenuView(value)}
+          onChange={(_, value) => {
+            setMenuView(value)
+            setCatalogPage(0)
+          }}
           aria-label="Menu management sections"
         >
           <Tab value="branch" label="Branch menu editor" />
@@ -629,7 +642,7 @@ function AdminMenuPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {products.map((product) => {
+                  {paginatedProducts.map((product) => {
                     const branchEntry = availabilityBranchId === branchId
                       ? availability.find((entry) => entry.product_id === product.id)
                       : null
@@ -738,6 +751,18 @@ function AdminMenuPage() {
                 </TableBody>
               </Table>
             </TableContainer>
+            {products.length > 0 && (
+              <PaginationControls
+                page={catalogPage}
+                pageSize={catalogPageSize}
+                hasNextPage={(catalogPage + 1) * catalogPageSize < products.length}
+                isLoading={isLoading}
+                onChange={(nextPage, nextPageSize) => {
+                  setCatalogPage(nextPage)
+                  setCatalogPageSize(nextPageSize)
+                }}
+              />
+            )}
           </Paper>
         )}
         {menuView === 'branch' && (
@@ -874,7 +899,7 @@ function AdminMenuPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {products.map((product) => (
+                {paginatedProducts.map((product) => (
                   <TableRow key={product.id} hover>
                     <TableCell sx={{ fontWeight: 700 }}>{product.name}</TableCell>
                     <TableCell>{product.sku}</TableCell>
@@ -889,6 +914,18 @@ function AdminMenuPage() {
               </TableBody>
             </Table>
           </TableContainer>
+          {products.length > 0 && (
+            <PaginationControls
+              page={catalogPage}
+              pageSize={catalogPageSize}
+              hasNextPage={(catalogPage + 1) * catalogPageSize < products.length}
+              isLoading={isLoading}
+              onChange={(nextPage, nextPageSize) => {
+                setCatalogPage(nextPage)
+                setCatalogPageSize(nextPageSize)
+              }}
+            />
+          )}
           {products.map((product) => {
             const edit = productEdits[product.id] || {}
             return (

@@ -29,6 +29,9 @@ import {
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
+import PaginationControls from '../../components/PaginationControls.jsx'
+
+const DEFAULT_BRANCH_PAGE_SIZE = 10
 
 const emptyBranch = {
   id: '',
@@ -71,6 +74,12 @@ export default function AdminBranchesPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const [branchPage, setBranchPage] = useState(0)
+  const [branchPageSize, setBranchPageSize] = useState(DEFAULT_BRANCH_PAGE_SIZE)
+  const pageBranches = branches.slice(
+    branchPage * branchPageSize,
+    (branchPage + 1) * branchPageSize,
+  )
 
   useEffect(() => {
     let active = true
@@ -203,6 +212,7 @@ export default function AdminBranchesPage() {
       if (result.error) throw new Error(result.error.message)
       setDialogOpen(false)
       setSuccessMessage(draft.id ? 'Branch details updated.' : 'Branch created. You can now assign staff to it.')
+      if (!draft.id) setBranchPage(0)
       setReloadKey((value) => value + 1)
     } catch (error) {
       console.error('Unable to save branch settings.', error)
@@ -405,39 +415,51 @@ export default function AdminBranchesPage() {
         {isLoading ? (
           <Stack sx={{ alignItems: 'center', py: 8 }}><CircularProgress /></Stack>
         ) : branches.length ? (
-          <TableContainer component={Paper} variant="outlined">
-            <Table size="small" aria-label="Branches" sx={{ minWidth: 850 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Branch</TableCell>
-                  <TableCell>Address</TableCell>
-                  <TableCell>Contact</TableCell>
-                  <TableCell>Delivery</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Action</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {branches.map((branch) => (
-                  <TableRow key={branch.id} hover>
-                    <TableCell sx={{ fontWeight: 700 }}>{branch.name}</TableCell>
-                    <TableCell>{branch.address || '—'}</TableCell>
-                    <TableCell>{[branch.phone, branch.email].filter(Boolean).join(' · ') || '—'}</TableCell>
-                    <TableCell>{branch.delivery_enabled ? 'Available' : 'Off'}</TableCell>
-                    <TableCell>
-                      <FormControlLabel
-                        control={<Switch size="small" checked={branch.is_active} onChange={(event) => toggleBranch(branch, event.target.checked)} />}
-                        label={branch.is_active ? 'Open' : 'Inactive'}
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Button size="small" startIcon={<EditIcon />} onClick={() => openEditBranch(branch)}>Edit</Button>
-                    </TableCell>
+          <>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small" aria-label="Branches" sx={{ minWidth: 850 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Branch</TableCell>
+                    <TableCell>Address</TableCell>
+                    <TableCell>Contact</TableCell>
+                    <TableCell>Delivery</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell align="right">Action</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {pageBranches.map((branch) => (
+                    <TableRow key={branch.id} hover>
+                      <TableCell sx={{ fontWeight: 700 }}>{branch.name}</TableCell>
+                      <TableCell>{branch.address || '—'}</TableCell>
+                      <TableCell>{[branch.phone, branch.email].filter(Boolean).join(' · ') || '—'}</TableCell>
+                      <TableCell>{branch.delivery_enabled ? 'Available' : 'Off'}</TableCell>
+                      <TableCell>
+                        <FormControlLabel
+                          control={<Switch size="small" checked={branch.is_active} onChange={(event) => toggleBranch(branch, event.target.checked)} />}
+                          label={branch.is_active ? 'Open' : 'Inactive'}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Button size="small" startIcon={<EditIcon />} onClick={() => openEditBranch(branch)}>Edit</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <PaginationControls
+              page={branchPage}
+              pageSize={branchPageSize}
+              hasNextPage={(branchPage + 1) * branchPageSize < branches.length}
+              isLoading={isLoading}
+              onChange={(nextPage, nextPageSize) => {
+                setBranchPage(nextPage)
+                setBranchPageSize(nextPageSize)
+              }}
+            />
+          </>
         ) : (
           <Alert severity="info">No branches have been created. Add the first branch to configure locations and staff access.</Alert>
         )}

@@ -102,8 +102,11 @@ export function AuthProvider({ children }) {
 
         if (active && currentRequest === requestId.current) {
           setSession(authSession)
+          const googleUserMetadata = authSession.user.user_metadata || {}
           const loadedAccount = {
             ...profile,
+            google_avatar_url:
+              googleUserMetadata.avatar_url || googleUserMetadata.picture || '',
             roles,
             branchAssignments,
             permissions,

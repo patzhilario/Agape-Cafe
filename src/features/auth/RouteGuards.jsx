@@ -2,6 +2,7 @@ import { lazy, useState } from 'react'
 import {
   Alert,
   AppBar,
+  Avatar,
   Box,
   Button,
   Chip,
@@ -80,13 +81,32 @@ export function RequireAuth({ children, roles }) {
 }
 
 export function AdminArea() {
-  const { account, hasPermission, signOut } = useAuth()
+  const { account, session, hasPermission, signOut } = useAuth()
   const location = useLocation()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [signOutError, setSignOutError] = useState('')
   const isSuperAdmin = account.roles.includes('super_admin')
+  const googleAvatarUrl =
+    account.google_avatar_url ||
+    session?.user?.user_metadata?.avatar_url ||
+    session?.user?.user_metadata?.picture ||
+    ''
+  const accountName =
+    account.display_name ||
+    session?.user?.user_metadata?.full_name ||
+    session?.user?.user_metadata?.name ||
+    account.email
+  const roleLabels = {
+    customer: 'Customer',
+    staff: 'Staff',
+    branch_admin: 'Branch admin',
+    super_admin: 'Super Admin',
+  }
+  const accountRole = isSuperAdmin
+    ? 'Super Admin'
+    : account.roles.map((role) => roleLabels[role] || role).join(', ')
   const sections = [
     { path: '', module: '', label: 'Overview', icon: DashboardIcon, group: 'Workspace' },
     { path: 'orders', module: 'orders', label: 'Orders', icon: ReceiptLongIcon, group: 'Daily operations' },
@@ -97,7 +117,7 @@ export function AdminArea() {
     { path: 'reports', module: 'reports', label: 'Reports', icon: AssessmentIcon, group: 'Performance' },
     { path: 'financials', module: 'financials', label: 'Financials', icon: PaymentsIcon, group: 'Performance' },
     ...(isSuperAdmin ? [
-      { path: 'permissions', module: 'staff', label: 'Staff access', icon: AdminPanelSettingsIcon, group: 'Administration' },
+      { path: 'permissions', module: 'staff', label: 'Account management', icon: AdminPanelSettingsIcon, group: 'Administration' },
       { path: 'audit', module: '', label: 'Audit trail', icon: HistoryIcon, group: 'Administration' },
       { path: 'branches', module: '', label: 'Branches', icon: Inventory2Icon, group: 'Administration' },
     ] : []),
@@ -197,9 +217,29 @@ export function AdminArea() {
         <Typography variant="body2" color="text.secondary">Admin workspace</Typography>
       </Box>
       <Divider />
-      <Box sx={{ px: 2, py: 2 }}>
-        <Typography fontWeight={700} noWrap>{account.display_name || account.email}</Typography>
-        <Chip size="small" label={isSuperAdmin ? 'Super Admin' : account.roles.join(', ')} sx={{ mt: 1, textTransform: 'capitalize' }} />
+      <Box sx={{ px: 2, py: 1.75 }}>
+        <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center', minWidth: 0 }}>
+          <Avatar
+            src={googleAvatarUrl || undefined}
+            alt={accountName}
+            sx={{ width: 42, height: 42, fontSize: '1rem', fontWeight: 700 }}
+          >
+            {accountName?.trim()?.charAt(0)?.toUpperCase() || '?'}
+          </Avatar>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography fontWeight={700} noWrap title={accountName}>
+              {accountName}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap title={account.email}>
+              {account.email}
+            </Typography>
+            <Chip
+              size="small"
+              label={accountRole || 'Account'}
+              sx={{ mt: 0.5, height: 22, maxWidth: '100%', '& .MuiChip-label': { px: 1 } }}
+            />
+          </Box>
+        </Stack>
       </Box>
       <Divider />
       <List sx={{ px: 1, py: 1, flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
