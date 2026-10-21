@@ -402,13 +402,20 @@ export default function AdminBranchesPage() {
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
       <Stack spacing={3}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={{ xs: 1.5, md: 2 }} sx={{ justifyContent: 'space-between', alignItems: { md: 'center' } }}>
           <Box>
             <Typography variant="overline" color="primary">Super Admin · Locations</Typography>
             <Typography variant="h2">Branches</Typography>
             <Typography color="text.secondary">Set up café locations, then assign staff and admins to their reporting branch.</Typography>
           </Box>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openNewBranch}>Add branch</Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={openNewBranch}
+            sx={{ alignSelf: { xs: 'stretch', md: 'auto' }, minHeight: 42 }}
+          >
+            Add branch
+          </Button>
         </Stack>
         {errorMessage && !dialogOpen && <Alert severity="error">{errorMessage}</Alert>}
         {successMessage && <Alert severity="success">{successMessage}</Alert>}

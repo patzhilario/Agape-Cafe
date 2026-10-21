@@ -166,9 +166,13 @@ export default function AccessManagementPage() {
       return matchesSearch && (!accountRoleFilter || role === accountRoleFilter)
     })
   }, [accountRoleFilter, accountSearch, userRoles, users])
+  const visibleAccountPage = Math.min(
+    accountPage,
+    Math.max(0, Math.ceil(filteredUsers.length / accountPageSize) - 1),
+  )
   const pageUsers = filteredUsers.slice(
-    accountPage * accountPageSize,
-    (accountPage + 1) * accountPageSize,
+    visibleAccountPage * accountPageSize,
+    (visibleAccountPage + 1) * accountPageSize,
   )
   const currentRoles = userRoles
     .filter((userRole) => userRole.user_id === selectedUserId)
@@ -499,35 +503,43 @@ export default function AccessManagementPage() {
           </Alert>
         ) : (
           <>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <TextField
-                fullWidth
-                size="small"
-                label="Search by name or email"
-                value={accountSearch}
-                onChange={(event) => {
-                  setAccountSearch(event.target.value)
-                  setAccountPage(0)
-                }}
-              />
-              <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 190 } }}>
-                <InputLabel id="account-role-filter-label">Filter by role</InputLabel>
-                <Select
-                  labelId="account-role-filter-label"
-                  label="Filter by role"
-                  value={accountRoleFilter}
+            <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 } }}>
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={1.5}
+                useFlexGap
+                sx={{ alignItems: { md: 'center' }, flexWrap: 'wrap' }}
+              >
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Search by name or email"
+                  value={accountSearch}
                   onChange={(event) => {
-                    setAccountRoleFilter(event.target.value)
+                    setAccountSearch(event.target.value)
                     setAccountPage(0)
                   }}
-                >
-                  <MenuItem value="">All roles</MenuItem>
-                  {roles.map((role) => (
-                    <MenuItem key={role.value} value={role.value}>{role.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Stack>
+                  sx={{ flex: '1 1 280px' }}
+                />
+                <FormControl size="small" sx={{ width: { xs: '100%', md: 220 }, flexShrink: 0 }}>
+                  <InputLabel id="account-role-filter-label">Filter by role</InputLabel>
+                  <Select
+                    labelId="account-role-filter-label"
+                    label="Filter by role"
+                    value={accountRoleFilter}
+                    onChange={(event) => {
+                      setAccountRoleFilter(event.target.value)
+                      setAccountPage(0)
+                    }}
+                  >
+                    <MenuItem value="">All roles</MenuItem>
+                    {roles.map((role) => (
+                      <MenuItem key={role.value} value={role.value}>{role.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Stack>
+            </Paper>
             {filteredUsers.length ? (
               <>
                 <TableContainer component={Paper} variant="outlined">
@@ -585,9 +597,9 @@ export default function AccessManagementPage() {
                   </Table>
                 </TableContainer>
                 <PaginationControls
-                  page={accountPage}
+                  page={visibleAccountPage}
                   pageSize={accountPageSize}
-                  hasNextPage={(accountPage + 1) * accountPageSize < filteredUsers.length}
+                  hasNextPage={(visibleAccountPage + 1) * accountPageSize < filteredUsers.length}
                   isLoading={isLoading}
                   onChange={(nextPage, nextPageSize) => {
                     setAccountPage(nextPage)

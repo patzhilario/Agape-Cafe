@@ -165,9 +165,9 @@ export default function AdminAuditPage() {
     <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
       <Stack spacing={3}>
         <Stack
-          direction={{ xs: 'column', sm: 'row' }}
+          direction={{ xs: 'column', md: 'row' }}
           spacing={2}
-          sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}
+          sx={{ justifyContent: 'space-between', alignItems: { md: 'center' } }}
         >
           <Box>
             <Typography variant="overline" color="primary">Security and accountability</Typography>
@@ -180,6 +180,7 @@ export default function AdminAuditPage() {
             variant="outlined"
             startIcon={<RefreshIcon />}
             disabled={isLoading}
+            sx={{ alignSelf: { xs: 'stretch', md: 'auto' }, minHeight: 42 }}
             onClick={() => {
               setIsLoading(true)
               setReloadKey((value) => value + 1)

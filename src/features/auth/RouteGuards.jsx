@@ -1,4 +1,4 @@
-import { lazy, useState } from 'react'
+import { lazy, useRef, useState } from 'react'
 import {
   Alert,
   AppBar,
@@ -37,6 +37,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import HistoryIcon from '@mui/icons-material/History'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { useAuth } from './useAuth.js'
+import logo from '../../assets/logo.jpg'
 
 const AccessManagementPage = lazy(() => import('./AccessManagementPage.jsx'))
 const AdminAuditPage = lazy(() => import('./AdminAuditPage.jsx'))
@@ -87,6 +88,7 @@ export function AdminArea() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [signOutError, setSignOutError] = useState('')
+  const mobileMenuButtonRef = useRef(null)
   const isSuperAdmin = account.roles.includes('super_admin')
   const googleAvatarUrl =
     account.google_avatar_url ||
@@ -157,9 +159,9 @@ export function AdminArea() {
               below to manage your branch operations.
             </Typography>
           </Box>
-          <Paper variant="outlined" sx={{ p: 2.5 }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 } }}>
             <Typography variant="subtitle2" color="text.secondary">Assigned branches</Typography>
-            <Typography>
+            <Typography sx={{ mt: 0.5, lineHeight: 1.6 }}>
               {account.branchAssignments.length
                 ? account.branchAssignments.map((assignment) => assignment.branch?.name || assignment.branch_id).join(', ')
                 : isSuperAdmin ? 'All branches' : 'No branch assigned — contact a Super Admin.'}
@@ -175,23 +177,44 @@ export function AdminArea() {
               if (!groupSections.length) return null
               return (
                 <Box key={group}>
-                  <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.25 }}>
+                  <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
                     {group}
                   </Typography>
-                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' }, gap: 2 }}>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' }, gap: { xs: 1.5, sm: 2 } }}>
                     {groupSections.map((section) => (
                       <Paper
                         key={section.path}
                         component={RouterLink}
                         to={`/admin/${section.path}`}
                         variant="outlined"
-                        sx={{ p: 2.5, textDecoration: 'none', color: 'inherit', transition: 'transform 150ms ease, border-color 150ms ease', '&:hover': { borderColor: 'primary.main', transform: 'translateY(-2px)' } }}
+                        sx={{
+                          p: { xs: 2, sm: 2.5 },
+                          minWidth: 0,
+                          textDecoration: 'none',
+                          color: 'inherit',
+                          transition: 'transform 150ms ease, border-color 150ms ease',
+                          '&:hover': { borderColor: 'primary.main', transform: 'translateY(-2px)' },
+                        }}
                       >
-                        <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-                          <section.icon color="primary" />
-                          <Box>
-                            <Typography variant="h6">{section.label}</Typography>
-                            <Typography variant="body2" color="text.secondary">Open {section.label.toLowerCase()}</Typography>
+                        <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', minWidth: 0 }}>
+                          <Box sx={{
+                            width: 40,
+                            height: 40,
+                            flexShrink: 0,
+                            borderRadius: 2,
+                            display: 'grid',
+                            placeItems: 'center',
+                            bgcolor: 'action.hover',
+                          }}>
+                            <section.icon color="primary" fontSize="small" />
+                          </Box>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="subtitle1" fontWeight={700} noWrap>
+                              {section.label}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" noWrap>
+                              Open {section.label.toLowerCase()}
+                            </Typography>
                           </Box>
                         </Stack>
                       </Paper>
@@ -213,7 +236,34 @@ export function AdminArea() {
   const drawerContent = (
     <Stack sx={{ height: '100%', minHeight: 0, overflow: 'hidden' }}>
       <Box sx={{ px: 2.5, py: 3 }}>
-        <Typography variant="h6" fontWeight={800}>Agapé Café</Typography>
+        <Box
+          component={RouterLink}
+          to="/"
+          aria-label="Agapé Café home"
+          sx={{
+            display: 'block',
+            position: 'relative',
+            width: '100%',
+            maxWidth: 220,
+            height: 68,
+            overflow: 'hidden',
+          }}
+        >
+          <Box
+            component="img"
+            src={logo}
+            alt="Agapé Café"
+            sx={{
+              width: 300,
+              height: 300,
+              maxWidth: 'none',
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+        </Box>
         <Typography variant="body2" color="text.secondary">Admin workspace</Typography>
       </Box>
       <Divider />
@@ -297,7 +347,14 @@ export function AdminArea() {
         variant={isMobile ? 'temporary' : 'permanent'}
         open={!isMobile || drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        ModalProps={{ keepMounted: true }}
+        ModalProps={{ keepMounted: true, disableRestoreFocus: true }}
+        slotProps={{
+          transition: {
+            onExited: () => {
+              if (isMobile) mobileMenuButtonRef.current?.focus()
+            },
+          },
+        }}
         sx={{
           width: 260,
           flexShrink: 0,
@@ -314,7 +371,16 @@ export function AdminArea() {
         <AppBar position="sticky" color="inherit" elevation={0} sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Toolbar>
             {isMobile && (
-              <IconButton edge="start" onClick={() => setDrawerOpen(true)} aria-label="Open admin navigation" sx={{ mr: 1 }}>
+              <IconButton
+                ref={mobileMenuButtonRef}
+                edge="start"
+                onClick={(event) => {
+                  event.currentTarget.blur()
+                  setDrawerOpen(true)
+                }}
+                aria-label="Open admin navigation"
+                sx={{ mr: 1 }}
+              >
                 <MenuIcon />
               </IconButton>
             )}

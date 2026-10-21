@@ -394,7 +394,7 @@ function AdminInventoryPage() {
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 5, md: 8 } }}>
       <Stack spacing={3}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={{ xs: 1.5, md: 2 }} sx={{ justifyContent: 'space-between', alignItems: { md: 'center' } }}>
           <Box>
           <Typography variant="overline" color="primary">Agapé Café · Operations</Typography>
           <Typography variant="h2">Inventory</Typography>
@@ -402,9 +402,18 @@ function AdminInventoryPage() {
             Record restocks and closing usage manually. Orders do not change inventory automatically.
           </Typography>
           </Box>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1}
+            useFlexGap
+            sx={{ width: { xs: '100%', md: 'auto' }, flexWrap: 'wrap', justifyContent: { md: 'flex-end' } }}
+          >
             {inventoryView === 'stock' && isSuperAdmin && (
-              <Button variant="outlined" onClick={() => openIngredientEditor()}>
+              <Button
+                variant="outlined"
+                onClick={() => openIngredientEditor()}
+                sx={{ width: { xs: '100%', sm: 'auto' }, minHeight: 42 }}
+              >
                 Add item
               </Button>
             )}
@@ -413,6 +422,7 @@ function AdminInventoryPage() {
                 variant="contained"
                 onClick={() => setMovementDialogOpen(true)}
                 disabled={!canManageInventory || !branchId}
+                sx={{ width: { xs: '100%', sm: 'auto' }, minHeight: 42 }}
               >
                 Add stock / record usage
               </Button>
@@ -572,22 +582,20 @@ function AdminInventoryPage() {
                 </Table>
               </TableContainer>
             ) : <Typography color="text.secondary">No inventory items have been configured.</Typography>}
-            {activeIngredients.length > 0 && (
-              <Box sx={{ px: 2, pb: 2 }}>
-                <PaginationControls
-                  page={inventoryPage}
-                  pageSize={inventoryPageSize}
-                  hasNextPage={(inventoryPage + 1) * inventoryPageSize < activeIngredients.length}
-                  isLoading={stockBranchId !== branchId}
-                  onChange={(nextPage, nextPageSize) => {
-                    setInventoryPage(nextPage)
-                    setInventoryPageSize(nextPageSize)
-                  }}
-                />
-              </Box>
-            )}
           </Stack>
         </Paper>
+        {activeIngredients.length > 0 && (
+          <PaginationControls
+            page={inventoryPage}
+            pageSize={inventoryPageSize}
+            hasNextPage={(inventoryPage + 1) * inventoryPageSize < activeIngredients.length}
+            isLoading={stockBranchId !== branchId}
+            onChange={(nextPage, nextPageSize) => {
+              setInventoryPage(nextPage)
+              setInventoryPageSize(nextPageSize)
+            }}
+          />
+        )}
         {isSuperAdmin && ingredients.some((ingredient) => !ingredient.is_active) && (
           <Accordion variant="outlined">
             <AccordionSummary

@@ -512,16 +512,28 @@ function AdminMenuPage() {
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 5, md: 8 } }}>
       <Stack spacing={3}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={{ xs: 1.5, md: 2 }} sx={{ justifyContent: 'space-between', alignItems: { md: 'center' } }}>
           <Box>
             <Typography variant="overline" color="primary">Agapé Café · Catalog</Typography>
             <Typography variant="h2">Menu</Typography>
             <Typography color="text.secondary">Manage this branch’s prices, availability, sizes, and add-ons without changing other branches’ catalog.</Typography>
           </Box>
           {isSuperAdmin && menuView === 'catalog' && (
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <Button variant="outlined" onClick={() => setCategoryDialogOpen(true)}>Add category</Button>
-              <Button variant="contained" onClick={() => setProductDialogOpen(true)}>Add product</Button>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap sx={{ width: { xs: '100%', md: 'auto' }, flexWrap: 'wrap' }}>
+              <Button
+                variant="outlined"
+                onClick={() => setCategoryDialogOpen(true)}
+                sx={{ width: { xs: '100%', sm: 'auto' }, minHeight: 42 }}
+              >
+                Add category
+              </Button>
+              <Button
+                variant="contained"
+                onClick={() => setProductDialogOpen(true)}
+                sx={{ width: { xs: '100%', sm: 'auto' }, minHeight: 42 }}
+              >
+                Add product
+              </Button>
             </Stack>
           )}
         </Stack>
