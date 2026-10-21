@@ -218,6 +218,10 @@ Migration 24 adds an optional Google Maps share link to each branch. Apply it
 after migration 23 on an existing project so branch admins can save map links
 and visitors can open an embedded branch map.
 
+Migration 25 fixes public reads of branch-specific menu size and add-on
+settings by separating anonymous visibility from authenticated staff access.
+Apply it after migration 24 on existing projects.
+
 The foundation migration also creates customer profiles and roles for any
 Supabase Auth users that already exist when the schema is installed. If the
 full setup was already installed before that backfill was added, run
