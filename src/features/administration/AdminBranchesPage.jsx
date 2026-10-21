@@ -258,7 +258,7 @@ export default function AdminBranchesPage() {
           .from('branch-payment-qr')
           .upload(uploadedQrPath, paymentQrFile, {
             contentType: paymentQrFile.type,
-            cacheControl: '3600',
+            cacheControl: '31536000',
             upsert: false,
           })
         if (error) throw new Error(`Could not upload the QR image: ${error.message}`)
@@ -286,7 +286,10 @@ export default function AdminBranchesPage() {
         const { error } = await supabase.storage
           .from('branch-payment-qr')
           .remove([paymentDraft.qr_code_path])
-        if (error) console.error('Unable to remove the replaced payment QR.', error)
+        if (error) {
+          console.error('Unable to remove the replaced payment QR.', error)
+          setErrorMessage('Payment method was saved, but its previous QR image could not be removed from storage.')
+        }
       }
       setPaymentDraft(emptyPaymentMethod)
       setPaymentQrFile(null)

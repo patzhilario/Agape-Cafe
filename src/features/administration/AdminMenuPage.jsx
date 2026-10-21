@@ -71,12 +71,24 @@ function AdminMenuPage() {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [editingProductId, setEditingProductId] = useState('')
   const [optionDialogType, setOptionDialogType] = useState('')
-  const [catalogPage, setCatalogPage] = useState(0)
-  const [catalogPageSize, setCatalogPageSize] = useState(DEFAULT_CATALOG_PAGE_SIZE)
+  const [branchPage, setBranchPage] = useState(0)
+  const [branchPageSize, setBranchPageSize] = useState(DEFAULT_CATALOG_PAGE_SIZE)
+  const [productPage, setProductPage] = useState(0)
+  const [productPageSize, setProductPageSize] = useState(DEFAULT_CATALOG_PAGE_SIZE)
+  const [categoryPage, setCategoryPage] = useState(0)
+  const [categoryPageSize, setCategoryPageSize] = useState(DEFAULT_CATALOG_PAGE_SIZE)
   const editingProduct = products.find((product) => product.id === editingProductId)
+  const paginatedBranchProducts = useMemo(
+    () => products.slice(branchPage * branchPageSize, (branchPage + 1) * branchPageSize),
+    [branchPage, branchPageSize, products],
+  )
   const paginatedProducts = useMemo(
-    () => products.slice(catalogPage * catalogPageSize, (catalogPage + 1) * catalogPageSize),
-    [catalogPage, catalogPageSize, products],
+    () => products.slice(productPage * productPageSize, (productPage + 1) * productPageSize),
+    [productPage, productPageSize, products],
+  )
+  const paginatedCategories = useMemo(
+    () => categories.slice(categoryPage * categoryPageSize, (categoryPage + 1) * categoryPageSize),
+    [categories, categoryPage, categoryPageSize],
   )
 
   const canEditBranchMenu = isSuperAdmin || (
@@ -230,6 +242,8 @@ function AdminMenuPage() {
       if (error) throw new Error(error.message)
       setCategoryName('')
       setCategoryDialogOpen(false)
+      setMenuView('catalog')
+      setCategoryPage(0)
       setSuccessMessage('Category created as unpublished.')
       setCatalogReloadKey((value) => value + 1)
     } catch (error) {
@@ -342,7 +356,8 @@ function AdminMenuPage() {
       }
       setNewProduct({ name: '', sku: '', description: '', price: '', categoryId: '' })
       setProductDialogOpen(false)
-      setCatalogPage(0)
+      setProductPage(0)
+      setMenuView('products')
       setSuccessMessage('Product created as unpublished; publish it when its menu details are ready.')
       setCatalogReloadKey((value) => value + 1)
       setAvailabilityReloadKey((value) => value + 1)
@@ -390,6 +405,7 @@ function AdminMenuPage() {
       }).eq('id', product.id)
       if (error) throw new Error(error.message)
       productSaved = true
+      let cleanupWarning = ''
       if (uploadedPath && product.image_path) {
         const { error: deleteError } = await getSupabaseClient()
           .storage
@@ -397,11 +413,11 @@ function AdminMenuPage() {
           .remove([product.image_path])
         if (deleteError) {
           console.error('Unable to remove the replaced product image.', deleteError)
-          setSuccessMessage(`${product.name} saved; the previous image could not be removed.`)
+          cleanupWarning = `${product.name} was saved, but the previous image could not be removed from storage.`
         }
-      } else {
-        setSuccessMessage(`${product.name} saved.`)
       }
+      if (cleanupWarning) setErrorMessage(cleanupWarning)
+      else setSuccessMessage(`${product.name} saved.`)
       setProductImageFiles((current) => {
         const next = { ...current }
         delete next[product.id]
@@ -521,22 +537,26 @@ function AdminMenuPage() {
             <Typography variant="h2">Menu</Typography>
             <Typography color="text.secondary">Manage this branch’s prices, availability, sizes, and add-ons without changing other branches’ catalog.</Typography>
           </Box>
-          {isSuperAdmin && menuView === 'catalog' && (
+          {isSuperAdmin && (menuView === 'catalog' || menuView === 'products') && (
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap sx={{ width: { xs: '100%', md: 'auto' }, flexWrap: 'wrap' }}>
-              <Button
-                variant="outlined"
-                onClick={() => setCategoryDialogOpen(true)}
-                sx={{ width: { xs: '100%', sm: 'auto' }, minHeight: 42 }}
-              >
-                Add category
-              </Button>
-              <Button
-                variant="contained"
-                onClick={() => setProductDialogOpen(true)}
-                sx={{ width: { xs: '100%', sm: 'auto' }, minHeight: 42 }}
-              >
-                Add product
-              </Button>
+              {menuView === 'catalog' && (
+                <Button
+                  variant="outlined"
+                  onClick={() => setCategoryDialogOpen(true)}
+                  sx={{ width: { xs: '100%', sm: 'auto' }, minHeight: 42 }}
+                >
+                  Add category
+                </Button>
+              )}
+              {menuView === 'products' && (
+                <Button
+                  variant="contained"
+                  onClick={() => setProductDialogOpen(true)}
+                  sx={{ width: { xs: '100%', sm: 'auto' }, minHeight: 42 }}
+                >
+                  Add product
+                </Button>
+              )}
             </Stack>
           )}
         </Stack>
@@ -556,12 +576,15 @@ function AdminMenuPage() {
           value={menuView}
           onChange={(_, value) => {
             setMenuView(value)
-            setCatalogPage(0)
+            setBranchPage(0)
+            setProductPage(0)
+            setCategoryPage(0)
           }}
           aria-label="Menu management sections"
         >
           <Tab value="branch" label="Branch menu editor" />
-          {isSuperAdmin && <Tab value="catalog" label="Product catalog" />}
+          {isSuperAdmin && <Tab value="catalog" label="Catalog" />}
+          {isSuperAdmin && <Tab value="products" label="Product list" />}
         </Tabs>
         {menuView === 'branch' && (
           <Alert severity="info">
@@ -583,7 +606,7 @@ function AdminMenuPage() {
                   <Table size="small" aria-label="Menu categories" sx={{ minWidth: 540 }}>
                     <TableHead><TableRow><TableCell>Category</TableCell><TableCell>Slug</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
                     <TableBody>
-                      {categories.map((category) => (
+                      {paginatedCategories.map((category) => (
                         <TableRow key={category.id} hover>
                           <TableCell sx={{ fontWeight: 700 }}>{category.name}</TableCell>
                           <TableCell>{category.slug}</TableCell>
@@ -599,6 +622,18 @@ function AdminMenuPage() {
                   </Table>
                 </TableContainer>
               ) : <Alert severity="info">No categories yet. Add one to organize the menu.</Alert>}
+              {categories.length > 0 && (
+                <PaginationControls
+                  page={categoryPage}
+                  pageSize={categoryPageSize}
+                  hasNextPage={(categoryPage + 1) * categoryPageSize < categories.length}
+                  isLoading={isLoading}
+                  onChange={(nextPage, nextPageSize) => {
+                    setCategoryPage(nextPage)
+                    setCategoryPageSize(nextPageSize)
+                  }}
+                />
+              )}
             </Box>
             <Dialog open={categoryDialogOpen} onClose={() => !isSaving && setCategoryDialogOpen(false)} fullWidth maxWidth="xs">
               <Box component="form" onSubmit={createCategory}>
@@ -609,35 +644,6 @@ function AdminMenuPage() {
                 <DialogActions sx={{ px: 3, pb: 2 }}>
                   <Button onClick={() => setCategoryDialogOpen(false)} disabled={isSaving}>Cancel</Button>
                   <Button type="submit" variant="contained" disabled={isSaving}>Create category</Button>
-                </DialogActions>
-              </Box>
-            </Dialog>
-            <Dialog open={productDialogOpen} onClose={() => !isSaving && setProductDialogOpen(false)} fullWidth maxWidth="sm">
-              <Box component="form" onSubmit={createProduct}>
-                <DialogTitle>Add menu product</DialogTitle>
-                <DialogContent>
-                  <Stack spacing={2} sx={{ pt: 1 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      Products are created unpublished. Review the details before making them visible on the public menu.
-                    </Typography>
-                    <TextField autoFocus label="Product name" value={newProduct.name} onChange={(event) => setNewProduct((value) => ({ ...value, name: event.target.value }))} required />
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                      <TextField fullWidth label="SKU" value={newProduct.sku} onChange={(event) => setNewProduct((value) => ({ ...value, sku: event.target.value }))} required />
-                      <TextField fullWidth label="Price (PHP)" type="number" value={newProduct.price} onChange={(event) => setNewProduct((value) => ({ ...value, price: event.target.value }))} required slotProps={{ htmlInput: { min: '0', step: '0.01' } }} />
-                    </Stack>
-                    <FormControl fullWidth>
-                      <InputLabel id="new-product-category">Category</InputLabel>
-                      <Select labelId="new-product-category" label="Category" value={newProduct.categoryId} onChange={(event) => setNewProduct((value) => ({ ...value, categoryId: event.target.value }))}>
-                        <MenuItem value="">No category</MenuItem>
-                        {categories.map((category) => <MenuItem key={category.id} value={category.id}>{category.name}{category.is_published ? '' : ' · unpublished'}</MenuItem>)}
-                      </Select>
-                    </FormControl>
-                    <TextField label="Description" value={newProduct.description} onChange={(event) => setNewProduct((value) => ({ ...value, description: event.target.value }))} multiline minRows={2} />
-                  </Stack>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2 }}>
-                  <Button onClick={() => setProductDialogOpen(false)} disabled={isSaving}>Cancel</Button>
-                  <Button type="submit" variant="contained" disabled={isSaving}>Create unpublished product</Button>
                 </DialogActions>
               </Box>
             </Dialog>
@@ -657,7 +663,7 @@ function AdminMenuPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {paginatedProducts.map((product) => {
+                  {paginatedBranchProducts.map((product) => {
                     const branchEntry = availabilityBranchId === branchId
                       ? availability.find((entry) => entry.product_id === product.id)
                       : null
@@ -768,13 +774,13 @@ function AdminMenuPage() {
             </TableContainer>
             {products.length > 0 && (
               <PaginationControls
-                page={catalogPage}
-                pageSize={catalogPageSize}
-                hasNextPage={(catalogPage + 1) * catalogPageSize < products.length}
+                page={branchPage}
+                pageSize={branchPageSize}
+                hasNextPage={(branchPage + 1) * branchPageSize < products.length}
                 isLoading={isLoading}
                 onChange={(nextPage, nextPageSize) => {
-                  setCatalogPage(nextPage)
-                  setCatalogPageSize(nextPageSize)
+                  setBranchPage(nextPage)
+                  setBranchPageSize(nextPageSize)
                 }}
               />
             )}
@@ -898,11 +904,41 @@ function AdminMenuPage() {
             </DialogActions>
           </Dialog>
         )}
-        {menuView === 'catalog' && isSuperAdmin && <Box>
+        {menuView === 'products' && isSuperAdmin && <>
+          <Dialog open={productDialogOpen} onClose={() => !isSaving && setProductDialogOpen(false)} fullWidth maxWidth="sm">
+            <Box component="form" onSubmit={createProduct}>
+              <DialogTitle>Add menu product</DialogTitle>
+              <DialogContent>
+                <Stack spacing={2} sx={{ pt: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Products are created unpublished. Review the details before making them visible on the public menu.
+                  </Typography>
+                  <TextField autoFocus label="Product name" value={newProduct.name} onChange={(event) => setNewProduct((value) => ({ ...value, name: event.target.value }))} required />
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <TextField fullWidth label="SKU" value={newProduct.sku} onChange={(event) => setNewProduct((value) => ({ ...value, sku: event.target.value }))} required />
+                    <TextField fullWidth label="Price (PHP)" type="number" value={newProduct.price} onChange={(event) => setNewProduct((value) => ({ ...value, price: event.target.value }))} required slotProps={{ htmlInput: { min: '0', step: '0.01' } }} />
+                  </Stack>
+                  <FormControl fullWidth>
+                    <InputLabel id="new-product-category">Category</InputLabel>
+                    <Select labelId="new-product-category" label="Category" value={newProduct.categoryId} onChange={(event) => setNewProduct((value) => ({ ...value, categoryId: event.target.value }))}>
+                      <MenuItem value="">No category</MenuItem>
+                      {categories.map((category) => <MenuItem key={category.id} value={category.id}>{category.name}{category.is_published ? '' : ' · unpublished'}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                  <TextField label="Description" value={newProduct.description} onChange={(event) => setNewProduct((value) => ({ ...value, description: event.target.value }))} multiline minRows={2} />
+                </Stack>
+              </DialogContent>
+              <DialogActions sx={{ px: 3, pb: 2 }}>
+                <Button onClick={() => setProductDialogOpen(false)} disabled={isSaving}>Cancel</Button>
+                <Button type="submit" variant="contained" disabled={isSaving}>Create unpublished product</Button>
+              </DialogActions>
+            </Box>
+          </Dialog>
+          <Box>
           {products.length ? (
           <>
           <TableContainer component={Paper} variant="outlined">
-            <Table size="small" aria-label="Product catalog" sx={{ minWidth: 700 }}>
+            <Table size="small" aria-label="Product list" sx={{ minWidth: 700 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Product</TableCell>
@@ -952,13 +988,13 @@ function AdminMenuPage() {
           </TableContainer>
           {products.length > 0 && (
             <PaginationControls
-              page={catalogPage}
-              pageSize={catalogPageSize}
-              hasNextPage={(catalogPage + 1) * catalogPageSize < products.length}
+              page={productPage}
+              pageSize={productPageSize}
+              hasNextPage={(productPage + 1) * productPageSize < products.length}
               isLoading={isLoading}
               onChange={(nextPage, nextPageSize) => {
-                setCatalogPage(nextPage)
-                setCatalogPageSize(nextPageSize)
+                setProductPage(nextPage)
+                setProductPageSize(nextPageSize)
               }}
             />
           )}
@@ -975,7 +1011,7 @@ function AdminMenuPage() {
                 <DialogTitle>Edit menu product · {product.name}</DialogTitle>
                 <DialogContent dividers>
                 <Stack spacing={2}>
-                  {isSuperAdmin && menuView === 'catalog' && (
+                  {isSuperAdmin && menuView === 'products' && (
                     <>
                       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                         <TextField label="Name" value={edit.name || ''} onChange={(event) => setProductEdits((state) => ({ ...state, [product.id]: { ...state[product.id], name: event.target.value } }))} />
@@ -1155,7 +1191,8 @@ function AdminMenuPage() {
           </Dialog>
           </>
           ) : <Alert severity="info">No products are configured. Add real catalog records; no sample products are created.</Alert>}
-        </Box>}
+          </Box>
+        </>}
         {menuView === 'catalog' && publishedCategories.length > 0 && (
           <Typography variant="body2" color="text.secondary">
             Published categories: {publishedCategories.map((category) => category.name).join(', ')}
