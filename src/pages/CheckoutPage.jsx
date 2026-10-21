@@ -706,34 +706,43 @@ export default function CheckoutPage({ panel = false }) {
               slotProps={{ htmlInput: { maxLength: 500 } }}
               helperText={`${note.length}/500`}
             />
-            <FormControl required>
+            <Box>
               <Typography variant="subtitle1" fontWeight={700}>Payment method</Typography>
               {fulfillment === 'pickup' && (
-                <RadioGroup
-                  value={selectedPaymentMethod?.settlement_type === 'pay_at_branch' ? paymentMethodId : ''}
-                  onChange={(event) => {
-                    setPaymentMethodId(event.target.value)
-                    setErrorMessage('')
-                  }}
-                >
-                  {availablePaymentMethods
-                    .filter((method) => method.settlement_type === 'pay_at_branch')
-                    .map((method) => (
-                      <FormControlLabel
-                        key={method.id}
-                        value={method.id}
-                        control={<Radio />}
-                        label={`${method.name} · Pick-up`}
-                      />
-                    ))}
-                </RadioGroup>
+                <>
+                  {availablePaymentMethods.some((method) => method.settlement_type === 'pay_at_branch') && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                      Pay at branch
+                    </Typography>
+                  )}
+                  <RadioGroup
+                    value={selectedPaymentMethod?.settlement_type === 'pay_at_branch' ? paymentMethodId : ''}
+                    onChange={(event) => {
+                      setPaymentMethodId(event.target.value)
+                      setErrorMessage('')
+                    }}
+                  >
+                    {availablePaymentMethods
+                      .filter((method) => method.settlement_type === 'pay_at_branch')
+                      .map((method) => (
+                        <FormControlLabel
+                          key={method.id}
+                          value={method.id}
+                          control={<Radio />}
+                          label={method.name}
+                        />
+                      ))}
+                  </RadioGroup>
+                </>
               )}
               {onlinePaymentMethods.length > 0 && (
-                <FormControl fullWidth size="small" sx={{ mt: 1 }}>
-                  <InputLabel id="checkout-online-payment-label">Online payment method</InputLabel>
+                <FormControl fullWidth required size="small" sx={{ mt: 1.5 }}>
+                  <InputLabel id="checkout-online-payment-label" shrink>
+                    Online payment
+                  </InputLabel>
                   <Select
                     labelId="checkout-online-payment-label"
-                    label="Online payment method"
+                    label="Online payment"
                     value={selectedPaymentMethod?.settlement_type === 'provider' ? paymentMethodId : ''}
                     displayEmpty
                     onChange={(event) => {
@@ -741,7 +750,7 @@ export default function CheckoutPage({ panel = false }) {
                       setErrorMessage('')
                     }}
                   >
-                    {fulfillment === 'pickup' && <MenuItem value="">Choose an online payment method</MenuItem>}
+                    {fulfillment === 'pickup' && <MenuItem value="">Select an online payment method</MenuItem>}
                     {onlinePaymentMethods.map((method) => (
                       <MenuItem key={method.id} value={method.id}>
                         {method.name}
@@ -760,7 +769,7 @@ export default function CheckoutPage({ panel = false }) {
                   Delivery is unavailable until an online QR payment method is configured for this branch.
                 </Typography>
               )}
-            </FormControl>
+            </Box>
             {selectedPaymentMethod?.settlement_type === 'provider' && selectedPaymentMethod.qr_code_path && (
               <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="subtitle1" fontWeight={700} gutterBottom>
