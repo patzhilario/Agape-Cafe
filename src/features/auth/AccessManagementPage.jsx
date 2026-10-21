@@ -14,6 +14,7 @@ import {
   Paper,
   Select,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
@@ -43,8 +44,14 @@ export default function AccessManagementPage() {
   const [selectedRole, setSelectedRole] = useState('customer')
   const [selectedBranches, setSelectedBranches] = useState([])
   const [selectedPermissions, setSelectedPermissions] = useState([])
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteName, setInviteName] = useState('')
+  const [inviteRole, setInviteRole] = useState('customer')
+  const [inviteBranches, setInviteBranches] = useState([])
+  const [invitePermissions, setInvitePermissions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isInviting, setIsInviting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const selectedUserIdRef = useRef(selectedUserId)
@@ -151,10 +158,17 @@ export default function AccessManagementPage() {
     [permissions],
   )
   const allPermissionIds = permissions.map((permission) => permission.id)
+  const inviteNeedsBranchAccess = inviteRole === 'staff' || inviteRole === 'branch_admin'
   const allPermissionsSelected =
     allPermissionIds.length > 0 &&
     allPermissionIds.every((permissionId) => selectedPermissions.includes(permissionId))
   const somePermissionsSelected = selectedPermissions.some((permissionId) =>
+    allPermissionIds.includes(permissionId),
+  )
+  const allInvitePermissionsSelected =
+    allPermissionIds.length > 0 &&
+    allPermissionIds.every((permissionId) => invitePermissions.includes(permissionId))
+  const someInvitePermissionsSelected = invitePermissions.some((permissionId) =>
     allPermissionIds.includes(permissionId),
   )
   const needsBranchAccess = selectedRole === 'staff' || selectedRole === 'branch_admin'
@@ -211,6 +225,56 @@ export default function AccessManagementPage() {
     }
   }
 
+  async function inviteUser() {
+    if (!inviteEmail.trim() || !inviteName.trim()) {
+      setErrorMessage('Enter the user’s name and email address.')
+      return
+    }
+    if (inviteNeedsBranchAccess && inviteBranches.length === 0) {
+      setErrorMessage('Assign at least one branch to this staff account.')
+      return
+    }
+
+    setIsInviting(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      const supabase = getSupabaseClient()
+      const { data, error } = await supabase.rpc('admin_invite_user_access', {
+        target_email: inviteEmail.trim(),
+        target_display_name: inviteName.trim(),
+        new_role: inviteRole,
+        branch_ids: inviteNeedsBranchAccess ? inviteBranches : [],
+        permission_ids: inviteNeedsBranchAccess ? invitePermissions : [],
+      })
+      if (error) throw error
+
+      const refreshed = await loadAccessData()
+      const actionMessage =
+        data === 'updated'
+          ? `Access updated for ${inviteEmail.trim()}.`
+          : `Access saved for ${inviteEmail.trim()}. The selected role will apply when they first sign in with that Google email.`
+      setSuccessMessage(
+        refreshed
+          ? actionMessage
+          : `${actionMessage} The account list could not refresh; reload this page to confirm.`,
+      )
+      setInviteEmail('')
+      setInviteName('')
+      setInviteBranches([])
+      setInvitePermissions([])
+    } catch (error) {
+      console.error('Unable to add account access by email.', error)
+      setErrorMessage(
+        error.message ||
+          'The account could not be added. Confirm that you are a Super Admin, the email is valid, and branch access is configured correctly.',
+      )
+    } finally {
+      setIsInviting(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <Stack sx={{ alignItems: 'center', py: 10 }} spacing={2}>
@@ -234,13 +298,167 @@ export default function AccessManagementPage() {
           </Typography>
         </Box>
         <Alert severity="info">
-          Staff accounts appear here after they sign in once using their own account. Then assign their role,
-          branch, and module permissions below.
+          Add an email below to assign access before the user signs in. Existing
+          accounts are updated immediately; new accounts receive the selected
+          role on their first Google sign-in with that email.
         </Alert>
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         {successMessage && <Alert severity="success">{successMessage}</Alert>}
+        <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
+          <Stack spacing={2.5}>
+            <Box>
+              <Typography variant="h5">Add account by email</Typography>
+              <Typography color="text.secondary">
+                The name and role will be assigned to this exact email address.
+              </Typography>
+            </Box>
+            <TextField
+              required
+              fullWidth
+              label="Full name"
+              value={inviteName}
+              onChange={(event) => setInviteName(event.target.value)}
+              inputProps={{ maxLength: 120 }}
+            />
+            <TextField
+              required
+              fullWidth
+              type="email"
+              label="Email address"
+              value={inviteEmail}
+              onChange={(event) => setInviteEmail(event.target.value)}
+            />
+            <FormControl fullWidth>
+              <InputLabel id="invite-role-label">Role</InputLabel>
+              <Select
+                labelId="invite-role-label"
+                label="Role"
+                value={inviteRole}
+                onChange={(event) => {
+                  const role = event.target.value
+                  setInviteRole(role)
+                  if (role !== 'staff' && role !== 'branch_admin') {
+                    setInviteBranches([])
+                    setInvitePermissions([])
+                  }
+                }}
+              >
+                {roles.map((role) => (
+                  <MenuItem key={role.value} value={role.value}>
+                    {role.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {inviteNeedsBranchAccess && (
+              <>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Branch assignments
+                  </Typography>
+                  {!branches.length ? (
+                    <Typography color="text.secondary">
+                      Create a branch before assigning staff.
+                    </Typography>
+                  ) : (
+                    <FormGroup>
+                      {branches.map((branch) => (
+                        <FormControlLabel
+                          key={branch.id}
+                          control={
+                            <Checkbox
+                              checked={inviteBranches.includes(branch.id)}
+                              onChange={() =>
+                                toggleSelection(branch.id, inviteBranches, setInviteBranches)
+                              }
+                            />
+                          }
+                          label={`${branch.name}${branch.is_active ? '' : ' · Inactive'}`}
+                        />
+                      ))}
+                    </FormGroup>
+                  )}
+                </Paper>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6">Module permissions</Typography>
+                  <FormControlLabel
+                    sx={{ ml: 0 }}
+                    control={
+                      <Checkbox
+                        checked={allInvitePermissionsSelected}
+                        indeterminate={
+                          !allInvitePermissionsSelected && someInvitePermissionsSelected
+                        }
+                        disabled={!allPermissionIds.length}
+                        onChange={(event) =>
+                          setInvitePermissions(
+                            event.target.checked ? allPermissionIds : [],
+                          )
+                        }
+                      />
+                    }
+                    label="Select all module permissions"
+                  />
+                  <Typography color="text.secondary" sx={{ mb: 2 }}>
+                    Selected actions apply to every assigned branch.
+                  </Typography>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: {
+                        xs: '1fr',
+                        md: 'repeat(2, minmax(0, 1fr))',
+                      },
+                      gap: 1.5,
+                    }}
+                  >
+                    {Object.entries(permissionGroups).map(([module, modulePermissions]) => (
+                      <Paper key={module} variant="outlined" sx={{ p: 1.5 }}>
+                        <Typography fontWeight={700} sx={{ textTransform: 'capitalize' }}>
+                          {module.replaceAll('_', ' ')}
+                        </Typography>
+                        <FormGroup row>
+                          {modulePermissions.map((permission) => (
+                            <FormControlLabel
+                              key={permission.id}
+                              control={
+                                <Checkbox
+                                  size="small"
+                                  checked={invitePermissions.includes(permission.id)}
+                                  onChange={() =>
+                                    toggleSelection(
+                                      permission.id,
+                                      invitePermissions,
+                                      setInvitePermissions,
+                                    )
+                                  }
+                                />
+                              }
+                              label={permission.action}
+                            />
+                          ))}
+                        </FormGroup>
+                      </Paper>
+                    ))}
+                  </Box>
+                </Paper>
+              </>
+            )}
+            <Button
+              variant="contained"
+              onClick={inviteUser}
+              disabled={isInviting}
+              startIcon={isInviting ? <CircularProgress size={18} color="inherit" /> : null}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              Add account
+            </Button>
+          </Stack>
+        </Paper>
         {!users.length ? (
-          <Alert severity="info">No accounts have registered yet. Ask the staff member to sign in once, then return here to grant access.</Alert>
+          <Alert severity="info">
+            No accounts have registered yet. You can preassign their access above.
+          </Alert>
         ) : (
           <>
             <FormControl fullWidth>

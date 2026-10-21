@@ -111,7 +111,7 @@ configuration values; never add a service-role key to the frontend.
 For a new Supabase project, run the combined SQL file once in the Supabase SQL
 Editor:
 
-`supabase/AGAPE_CAFE_FULL_SETUP.sql` contains all twenty schema migrations in order.
+`supabase/AGAPE_CAFE_FULL_SETUP.sql` contains the ordered schema migrations.
 Use that file instead of uploading the individual files below; do not run both
 the combined script and the migrations. For Supabase CLI workflows, the
 individual files remain available under `supabase/migrations/`:
@@ -200,6 +200,19 @@ add-on availability and prices while preserving the shared product catalog.
 Public menus and server-validated checkout use those overrides, including
 promotion totals; checkout continues requiring a size whenever the catalog
 defines active sizes, even if every size is disabled for a branch.
+
+Migration 21 repairs ambiguous add-on references in checkout. Migration 22
+lets Super Admins add an account by email, name, and role before registration.
+For a new account, the selected role and any branch permissions are applied
+when the user first signs in with that same Google email; an existing account
+is updated immediately. Apply migration 21 and then migration 22 to an
+existing project that has applied migration 20, or apply migration 22 if
+migration 21 is already installed. The initial `SUPER_ADMIN_EMAIL` setting is
+still only for provisioning the first Super Admin.
+
+Migration 23 adds an audited manual override for recording GCash payments
+verified outside the submitted-proof workflow; staff must enter a reason.
+Apply it after migrations 21 and 22 on an existing project.
 
 The foundation migration also creates customer profiles and roles for any
 Supabase Auth users that already exist when the schema is installed. If the
@@ -293,6 +306,20 @@ shown by Supabase (`https://<project-ref>.supabase.co/auth/v1/callback`). Add
 local and production app URLs to Supabase Auth's redirect URL allowlist; the
 app redirects to `/auth/callback`. Provision the first `super_admin` role
 using the Supabase SQL editor after that administrator signs in once.
+
+## Vercel deployment
+
+Import this repository into Vercel and keep the project root at the repository
+root. Vercel detects Vite automatically; the production build command is
+`npm run build` and the output directory is `dist`. The root `vercel.json`
+rewrites app routes to `index.html`, so direct links and browser refreshes work
+for React Router routes.
+
+Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as Vercel environment
+variables for the environments you deploy. In Supabase Auth URL configuration,
+set the production site URL and add the production domain (including
+`https://<your-domain>/auth/callback`) to the redirect URL allowlist. Redeploy
+after changing environment variables.
 
 ## Current limitations
 

@@ -24,6 +24,7 @@ import {
 import {
   getAdminBranches,
   getOrders,
+  recordManualGcashPaymentOverride,
   recordOrderPayment,
   updateOrderStatus,
 } from './adminData.js'
@@ -65,6 +66,7 @@ export default function AdminOrdersPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [proofUrls, setProofUrls] = useState({})
   const [paymentReviewNotes, setPaymentReviewNotes] = useState({})
+  const [manualPaymentOverrideNotes, setManualPaymentOverrideNotes] = useState({})
   const [benefitDocumentUrls, setBenefitDocumentUrls] = useState({})
   const [benefitReviewNotes, setBenefitReviewNotes] = useState({})
 
@@ -137,9 +139,22 @@ export default function AdminOrdersPage() {
     setErrorMessage('')
     setSuccessMessage('')
     try {
-      if (action === 'paid') {
-        await recordOrderPayment(order.id)
-        setSuccessMessage(`Payment recorded for ${order.order_number}.`)
+      if (action === 'paid' || action === 'manual_gcash_override') {
+        if (action === 'manual_gcash_override') {
+          const reason = manualPaymentOverrideNotes[order.id]?.trim() || ''
+          if (reason.length < 3) {
+            setErrorMessage('Enter a reason of at least 3 characters for the manual override.')
+            return
+          }
+          await recordManualGcashPaymentOverride(order.id, reason)
+        } else {
+          await recordOrderPayment(order.id)
+        }
+        setSuccessMessage(
+          action === 'manual_gcash_override'
+            ? `Manual GCash payment override recorded for ${order.order_number}.`
+            : `Payment recorded for ${order.order_number}.`,
+        )
         setOrders((current) => current.map((item) => (
           item.id === order.id ? { ...item, payment_status: 'paid' } : item
         )))
@@ -529,11 +544,24 @@ export default function AdminOrdersPage() {
                     ) : (
                       <Stack spacing={1}>
                         <Typography variant="body2" color="text.secondary">Waiting for customer to upload GCash payment proof.</Typography>
+                        <TextField
+                          size="small"
+                          label="Reason for manual override"
+                          value={manualPaymentOverrideNotes[order.id] || ''}
+                          onChange={(event) => setManualPaymentOverrideNotes((current) => ({
+                            ...current,
+                            [order.id]: event.target.value,
+                          }))}
+                          slotProps={{ htmlInput: { maxLength: 500 } }}
+                        />
                         <Button
                           variant="outlined"
                           size="small"
-                          disabled={busyOrderId === order.id}
-                          onClick={() => runOrderAction(order, 'paid')}
+                          disabled={
+                            busyOrderId === order.id ||
+                            (manualPaymentOverrideNotes[order.id]?.trim().length || 0) < 3
+                          }
+                          onClick={() => runOrderAction(order, 'manual_gcash_override')}
                           sx={{ alignSelf: 'flex-start' }}
                         >
                           Manual override: Record payment

@@ -104,8 +104,8 @@ export function AuthPage() {
           </Button>
           <Divider />
           <Typography variant="body2" color="text.secondary">
-            New accounts are registered as customers. Administrative access is
-            granted only by an authorized administrator.
+            New accounts are customers unless a Super Admin has already
+            assigned a role to their Google email.
           </Typography>
           <Button component={RouterLink} to="/" color="inherit" sx={{ alignSelf: 'flex-start' }}>
             Back to home

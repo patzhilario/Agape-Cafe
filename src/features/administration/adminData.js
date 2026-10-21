@@ -67,3 +67,11 @@ export async function recordOrderPayment(orderId) {
   })
   if (error) throw new Error(error.message)
 }
+
+export async function recordManualGcashPaymentOverride(orderId, reason) {
+  const { error } = await getSupabaseClient().rpc('record_manual_gcash_payment_override', {
+    target_order_id: orderId,
+    override_reason: reason,
+  })
+  if (error) throw new Error(error.message)
+}
