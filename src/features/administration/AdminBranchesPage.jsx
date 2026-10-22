@@ -30,6 +30,7 @@ import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
 import PaginationControls from '../../components/PaginationControls.jsx'
+import DeleteConfirmationDialog from '../../components/DeleteConfirmationDialog.jsx'
 
 const DEFAULT_BRANCH_PAGE_SIZE = 10
 
@@ -71,6 +72,8 @@ export default function AdminBranchesPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [diningTableDialogOpen, setDiningTableDialogOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
@@ -402,6 +405,118 @@ export default function AdminBranchesPage() {
     }
   }
 
+  function requestDelete(type, record) {
+    setErrorMessage('')
+    setDeleteTarget({ type, record })
+  }
+
+  async function deleteBranch() {
+    if (!deleteTarget || deleteTarget.type !== 'branch') return
+    const branch = deleteTarget.record
+    setIsDeleting(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+    try {
+      const { data: paymentMethods, error: paymentMethodsError } = await getSupabaseClient()
+        .from('payment_methods')
+        .select('qr_code_path')
+        .eq('branch_id', branch.id)
+      if (paymentMethodsError) throw new Error(paymentMethodsError.message)
+
+      const { data, error } = await getSupabaseClient()
+        .from('branches')
+        .delete()
+        .eq('id', branch.id)
+        .select('id')
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      if (!data) throw new Error('This branch no longer exists. Refresh the page and try again.')
+
+      setDeleteTarget(null)
+      setSuccessMessage(`${branch.name} was permanently deleted.`)
+      setReloadKey((value) => value + 1)
+      const qrPaths = paymentMethods.map(({ qr_code_path }) => qr_code_path).filter(Boolean)
+      if (qrPaths.length) {
+        const { error: storageError } = await getSupabaseClient()
+          .storage
+          .from('branch-payment-qr')
+          .remove(qrPaths)
+        if (storageError) {
+          console.error('Branch was deleted, but its payment QR images could not be removed.', storageError)
+          setErrorMessage(`Branch was deleted, but its payment QR images could not be removed from storage: ${storageError.message}`)
+        }
+      }
+    } catch (error) {
+      console.error('Unable to delete branch.', error)
+      setErrorMessage(error.message)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  async function deletePaymentMethod() {
+    if (!deleteTarget || deleteTarget.type !== 'payment_method') return
+    const method = deleteTarget.record
+    setIsDeleting(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+    try {
+      const { data, error } = await getSupabaseClient()
+        .from('payment_methods')
+        .delete()
+        .eq('id', method.id)
+        .select('id')
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      if (!data) throw new Error('This payment method no longer exists. Refresh the page and try again.')
+      setBranchPaymentMethods((current) => current.filter((item) => item.id !== method.id))
+      setDeleteTarget(null)
+      setSuccessMessage(`${method.name} was permanently deleted.`)
+      if (method.qr_code_path) {
+        const { error: storageError } = await getSupabaseClient()
+          .storage
+          .from('branch-payment-qr')
+          .remove([method.qr_code_path])
+        if (storageError) {
+          console.error('Payment method was deleted, but its QR image could not be removed.', storageError)
+          setErrorMessage(`Payment method was deleted, but its QR image could not be removed from storage: ${storageError.message}`)
+        }
+      }
+    } catch (error) {
+      console.error('Unable to delete branch payment method.', error)
+      setErrorMessage(error.message)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  async function deleteDiningTable() {
+    if (!deleteTarget || deleteTarget.type !== 'dining_table') return
+    const table = deleteTarget.record
+    setIsDeleting(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+    try {
+      const { data, error } = await getSupabaseClient()
+        .from('branch_dining_tables')
+        .delete()
+        .eq('id', table.id)
+        .eq('branch_id', draft.id)
+        .select('id')
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      if (!data) throw new Error('This dining table no longer exists. Refresh the page and try again.')
+      setBranchDiningTables((current) => current.filter((entry) => entry.id !== table.id))
+      setDeleteTarget(null)
+      setSuccessMessage(`${table.label} was permanently deleted.`)
+    } catch (error) {
+      console.error('Unable to delete branch dining table.', error)
+      setErrorMessage(error.message)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 } }}>
       <Stack spacing={3}>
@@ -452,7 +567,17 @@ export default function AdminBranchesPage() {
                         />
                       </TableCell>
                       <TableCell align="right">
-                        <Button size="small" startIcon={<EditIcon />} onClick={() => openEditBranch(branch)}>Edit</Button>
+                        <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
+                          <Button size="small" startIcon={<EditIcon />} onClick={() => openEditBranch(branch)}>Edit</Button>
+                          <Button
+                            size="small"
+                            color="error"
+                            onClick={() => requestDelete('branch', branch)}
+                            disabled={isDeleting}
+                          >
+                            Delete
+                          </Button>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -564,6 +689,15 @@ export default function AdminBranchesPage() {
                                         Deactivate
                                       </Button>
                                     )}
+                                    <Button
+                                      type="button"
+                                      size="small"
+                                      color="error"
+                                      onClick={() => requestDelete('payment_method', method)}
+                                      disabled={isDeleting}
+                                    >
+                                      Delete
+                                    </Button>
                                   </TableCell>
                                 </TableRow>
                               ))}
@@ -635,6 +769,15 @@ export default function AdminBranchesPage() {
                                         onClick={() => void setDiningTableActive(table, !table.is_active)}
                                       >
                                         {table.is_active ? 'Disable' : 'Enable'}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="small"
+                                        color="error"
+                                        onClick={() => requestDelete('dining_table', table)}
+                                        disabled={isDeleting}
+                                      >
+                                        Delete
                                       </Button>
                                     </TableCell>
                                   </TableRow>
@@ -790,6 +933,38 @@ export default function AdminBranchesPage() {
           </Button>
         </DialogActions>
       </Dialog>
+      <DeleteConfirmationDialog
+        open={Boolean(deleteTarget)}
+        title={deleteTarget?.type === 'branch'
+          ? 'Permanently delete branch?'
+          : deleteTarget?.type === 'payment_method'
+            ? 'Permanently delete payment method?'
+            : 'Permanently delete dining table?'}
+        itemName={deleteTarget?.type === 'branch'
+          ? deleteTarget.record.name
+          : deleteTarget?.type === 'payment_method'
+            ? deleteTarget.record.name
+            : deleteTarget?.record.label}
+        itemType={deleteTarget?.type === 'branch'
+          ? 'branch'
+          : deleteTarget?.type === 'payment_method'
+            ? 'payment method'
+            : 'dining table'}
+        detail={deleteTarget?.type === 'branch'
+          ? 'Its payment methods, QR codes, dining tables, and branch-specific menu/stock settings will also be removed. Branches referenced by orders, staff assignments, or financial records are protected and cannot be deleted.'
+          : deleteTarget?.type === 'payment_method'
+            ? 'Past payments keep their transaction details. This payment method will no longer be available.'
+            : 'A dining table referenced by an order cannot be deleted. Disable it instead to keep its order history.'}
+        warning="Permanent deletion cannot be undone."
+        errorMessage={errorMessage}
+        isDeleting={isDeleting}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget?.type === 'branch') void deleteBranch()
+          else if (deleteTarget?.type === 'payment_method') void deletePaymentMethod()
+          else if (deleteTarget?.type === 'dining_table') void deleteDiningTable()
+        }}
+      />
     </Container>
   )
 }

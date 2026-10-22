@@ -29,6 +29,7 @@ import {
 import { useAuth } from '../auth/useAuth.js'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
 import { formatPrice } from '../public/publicData.js'
+import DeleteConfirmationDialog from '../../components/DeleteConfirmationDialog.jsx'
 
 function check({ data, error }) {
   if (error) throw new Error(error.message)
@@ -60,6 +61,7 @@ function AdminPromotionsPage() {
   const [successMessage, setSuccessMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const [promotionDialogOpen, setPromotionDialogOpen] = useState(false)
+  const [promotionToDelete, setPromotionToDelete] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -165,6 +167,29 @@ function AdminPromotionsPage() {
       setReloadKey((value) => value + 1)
     } catch (error) {
       console.error('Unable to update promotion status.', error)
+      setErrorMessage(error.message)
+    } finally { setIsSaving(false) }
+  }
+
+  async function deletePromotion() {
+    if (!promotionToDelete) return
+    setIsSaving(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+    try {
+      const { data, error } = await getSupabaseClient()
+        .from('promotions')
+        .delete()
+        .eq('id', promotionToDelete.id)
+        .select('id')
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      if (!data) throw new Error('This promotion no longer exists. Refresh the page and try again.')
+      setSuccessMessage(`${promotionToDelete.name} was permanently deleted.`)
+      setPromotionToDelete(null)
+      setReloadKey((value) => value + 1)
+    } catch (error) {
+      console.error('Unable to delete promotion.', error)
       setErrorMessage(error.message)
     } finally { setIsSaving(false) }
   }
@@ -297,6 +322,7 @@ function AdminPromotionsPage() {
                     <TableCell>Minimum</TableCell>
                     <TableCell>Products</TableCell>
                     <TableCell>Status</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -328,6 +354,19 @@ function AdminPromotionsPage() {
                           label={promotion.is_active ? 'Active' : 'Inactive'}
                         />
                       </TableCell>
+                      <TableCell align="right">
+                        <Button
+                          size="small"
+                          color="error"
+                          onClick={() => {
+                            setErrorMessage('')
+                            setPromotionToDelete(promotion)
+                          }}
+                          disabled={isSaving}
+                        >
+                          Delete
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -336,6 +375,18 @@ function AdminPromotionsPage() {
           ) : <Alert severity="info" sx={{ mt: 1.5 }}>No promotions have been configured.</Alert>}
         </Box>
       </Stack>
+      <DeleteConfirmationDialog
+        open={Boolean(promotionToDelete)}
+        title="Permanently delete promotion?"
+        itemName={promotionToDelete?.name}
+        itemType="promotion"
+        detail="Orders and payment history keep their saved totals. A promotion that has recorded redemptions cannot be deleted."
+        warning="This action cannot be undone."
+        errorMessage={errorMessage}
+        isDeleting={isSaving}
+        onCancel={() => setPromotionToDelete(null)}
+        onConfirm={() => void deletePromotion()}
+      />
     </Container>
   )
 }

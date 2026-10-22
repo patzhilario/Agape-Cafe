@@ -36,6 +36,7 @@ import { getAdminBranches } from './adminData.js'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
 import { formatPrice } from '../public/publicData.js'
 import PaginationControls from '../../components/PaginationControls.jsx'
+import DeleteConfirmationDialog from '../../components/DeleteConfirmationDialog.jsx'
 
 const DEFAULT_PAGE_SIZE = 10
 
@@ -571,7 +572,10 @@ function AdminInventoryPage() {
                               <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
                                 <Button size="small" onClick={() => openIngredientEditor(ingredient)}>Edit</Button>
                                 <Button size="small" color="warning" onClick={() => setIngredientToArchive(ingredient)}>Archive</Button>
-                                <Button size="small" color="error" onClick={() => setIngredientToDelete(ingredient)}>Delete</Button>
+                                <Button size="small" color="error" onClick={() => {
+                                  setErrorMessage('')
+                                  setIngredientToDelete(ingredient)
+                                }}>Delete</Button>
                               </Stack>
                             </TableCell>
                           )}
@@ -636,7 +640,10 @@ function AdminInventoryPage() {
                             <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
                               <Button size="small" onClick={() => openIngredientEditor(ingredient)}>Edit</Button>
                               <Button size="small" onClick={() => void setIngredientActive(ingredient, true)} disabled={isSaving}>Restore</Button>
-                              <Button size="small" color="error" onClick={() => setIngredientToDelete(ingredient)}>Delete</Button>
+                              <Button size="small" color="error" onClick={() => {
+                                setErrorMessage('')
+                                setIngredientToDelete(ingredient)
+                              }}>Delete</Button>
                             </Stack>
                           </TableCell>
                         </TableRow>
@@ -799,30 +806,18 @@ function AdminInventoryPage() {
             </Button>
           </DialogActions>
         </Dialog>
-        <Dialog
+        <DeleteConfirmationDialog
           open={Boolean(ingredientToDelete)}
-          onClose={() => !isSaving && setIngredientToDelete(null)}
-          fullWidth
-          maxWidth="xs"
-        >
-          <DialogTitle>Delete item and all its records?</DialogTitle>
-          <DialogContent>
-            <Stack spacing={1}>
-              <Typography variant="body2">
-                Permanently delete <strong>{ingredientToDelete?.name}</strong> and its linked data?
-              </Typography>
-              <Alert severity="error">
-                This deletes its branch stock, saved recipe links, and all stock movements. Completed-order ingredient costs that used this item will no longer be included in Financials/Reports. This cannot be undone.
-              </Alert>
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={() => setIngredientToDelete(null)} disabled={isSaving}>Cancel</Button>
-            <Button color="error" variant="contained" onClick={() => void deleteIngredientWithHistory()} disabled={isSaving}>
-              {isSaving ? 'Deleting…' : 'Delete item and records'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+          title="Delete inventory item and its records?"
+          itemName={ingredientToDelete?.name}
+          itemType="inventory item"
+          detail="Items with stock movement history or remaining stock are protected so financial and inventory records stay intact. For those items, use Archive instead."
+          warning="If no history or stock remains, this also removes saved recipe links and zero-stock rows. Permanent deletion cannot be undone."
+          errorMessage={errorMessage}
+          isDeleting={isSaving}
+          onCancel={() => setIngredientToDelete(null)}
+          onConfirm={() => void deleteIngredientWithHistory()}
+        />
         <Dialog
           open={unitChangeConfirmationOpen}
           onClose={() => !isSaving && setUnitChangeConfirmationOpen(false)}

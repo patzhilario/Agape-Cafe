@@ -35,6 +35,7 @@ import { getSupabaseClient } from '../../lib/supabaseClient.js'
 import { formatPrice, publicImageUrl } from '../public/publicData.js'
 import { optimizeProductImage } from '../../lib/imageOptimization.js'
 import PaginationControls from '../../components/PaginationControls.jsx'
+import DeleteConfirmationDialog from '../../components/DeleteConfirmationDialog.jsx'
 
 const DEFAULT_CATALOG_PAGE_SIZE = 10
 
@@ -69,6 +70,7 @@ function AdminMenuPage() {
   const [availabilityReloadKey, setAvailabilityReloadKey] = useState(0)
   const [productDialogOpen, setProductDialogOpen] = useState(false)
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [editingProductId, setEditingProductId] = useState('')
   const [optionDialogType, setOptionDialogType] = useState('')
   const [branchPage, setBranchPage] = useState(0)
@@ -266,6 +268,55 @@ function AdminMenuPage() {
       setCatalogReloadKey((value) => value + 1)
     } catch (error) {
       console.error('Unable to update category publication.', error)
+      setErrorMessage(error.message)
+    } finally { setIsSaving(false) }
+  }
+
+  function requestMenuDelete(type, record) {
+    setErrorMessage('')
+    setDeleteTarget({ type, record })
+  }
+
+  async function deleteMenuRecord() {
+    if (!deleteTarget) return
+    const tableByType = {
+      category: 'categories',
+      product: 'products',
+      variant: 'product_variants',
+      addon: 'product_addons',
+    }
+    const table = tableByType[deleteTarget.type]
+    if (!table) return
+    setIsSaving(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+    try {
+      const { data, error } = await getSupabaseClient()
+        .from(table)
+        .delete()
+        .eq('id', deleteTarget.record.id)
+        .select('id')
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      if (!data) throw new Error('This menu record no longer exists. Refresh the page and try again.')
+
+      const { type, record } = deleteTarget
+      setDeleteTarget(null)
+      setCatalogReloadKey((value) => value + 1)
+      setAvailabilityReloadKey((value) => value + 1)
+      setSuccessMessage(`${record.name} was permanently deleted.`)
+      if (type === 'product' && record.image_path) {
+        const { error: imageError } = await getSupabaseClient()
+          .storage
+          .from('menu-images')
+          .remove([record.image_path])
+        if (imageError) {
+          console.error('Product was deleted, but its image could not be removed.', imageError)
+          setErrorMessage(`Product was deleted, but its image could not be removed from storage: ${imageError.message}`)
+        }
+      }
+    } catch (error) {
+      console.error('Unable to delete menu data.', error)
       setErrorMessage(error.message)
     } finally { setIsSaving(false) }
   }
@@ -604,7 +655,7 @@ function AdminMenuPage() {
               {categories.length ? (
                 <TableContainer component={Paper} variant="outlined">
                   <Table size="small" aria-label="Menu categories" sx={{ minWidth: 540 }}>
-                    <TableHead><TableRow><TableCell>Category</TableCell><TableCell>Slug</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
+                    <TableHead><TableRow><TableCell>Category</TableCell><TableCell>Slug</TableCell><TableCell>Status</TableCell><TableCell align="right">Actions</TableCell></TableRow></TableHead>
                     <TableBody>
                       {paginatedCategories.map((category) => (
                         <TableRow key={category.id} hover>
@@ -615,6 +666,16 @@ function AdminMenuPage() {
                               control={<Switch size="small" checked={category.is_published} disabled={isSaving} onChange={(event) => publishCategory(category, event.target.checked)} />}
                               label={category.is_published ? 'Published' : 'Unpublished'}
                             />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Button
+                              size="small"
+                              color="error"
+                              onClick={() => requestMenuDelete('category', category)}
+                              disabled={isSaving}
+                            >
+                              Delete
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -946,7 +1007,7 @@ function AdminMenuPage() {
                   <TableCell>Category</TableCell>
                   <TableCell align="right">Price</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell align="right">Action</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -980,6 +1041,14 @@ function AdminMenuPage() {
                     </TableCell>
                     <TableCell align="right">
                       <Button size="small" variant="outlined" onClick={() => setEditingProductId(product.id)}>Edit</Button>
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={() => requestMenuDelete('product', product)}
+                        disabled={isSaving}
+                      >
+                        Delete
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1096,6 +1165,7 @@ function AdminMenuPage() {
                                   <TableCell>Name</TableCell>
                                   <TableCell align="right">Price</TableCell>
                                   <TableCell>Status</TableCell>
+                                  <TableCell align="right">Actions</TableCell>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
@@ -1114,6 +1184,16 @@ function AdminMenuPage() {
                                         control={<Switch size="small" checked={option.is_active} disabled={isSaving} onChange={(event) => setOptionActive(option, option.type, event.target.checked)} />}
                                         label={option.is_active ? 'Active' : 'Inactive'}
                                       />
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      <Button
+                                        size="small"
+                                        color="error"
+                                        onClick={() => requestMenuDelete(option.type, option)}
+                                        disabled={isSaving}
+                                      >
+                                        Delete
+                                      </Button>
                                     </TableCell>
                                   </TableRow>
                                 ))}
@@ -1199,6 +1279,22 @@ function AdminMenuPage() {
           </Typography>
         )}
       </Stack>
+      <DeleteConfirmationDialog
+        open={Boolean(deleteTarget)}
+        title={`Permanently delete ${deleteTarget?.type === 'category' ? 'category' : deleteTarget?.type === 'product' ? 'product' : 'menu option'}?`}
+        itemName={deleteTarget?.record.name}
+        itemType={deleteTarget?.type === 'category' ? 'category' : deleteTarget?.type === 'product' ? 'product' : 'option'}
+        detail={deleteTarget?.type === 'category'
+          ? 'Products in this category will remain in the catalog without a category.'
+          : deleteTarget?.type === 'product'
+            ? 'The product, its sizes/add-ons, branch stock and recipe links will be removed. Existing orders keep their saved item details.'
+            : 'Existing orders keep their saved option details.'}
+        warning="This action cannot be undone."
+        errorMessage={errorMessage}
+        isDeleting={isSaving}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => void deleteMenuRecord()}
+      />
     </Container>
   )
 }

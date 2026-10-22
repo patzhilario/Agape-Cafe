@@ -34,6 +34,7 @@ const actionDescriptions = {
   branch_expense_voided: 'A branch expense was voided.',
   customer_order_created: 'A customer placed an order.',
   inventory_item_deleted_with_history: 'An inventory item and its linked history were permanently deleted.',
+  inventory_item_deleted: 'An inventory item with no stock history was permanently deleted.',
   order_cancelled: 'An order was cancelled.',
   order_payment_recorded: 'An order payment was recorded.',
   order_payment_proof_rejected: 'A GCash payment proof was rejected.',
