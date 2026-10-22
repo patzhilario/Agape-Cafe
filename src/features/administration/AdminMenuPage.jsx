@@ -39,6 +39,14 @@ import DeleteConfirmationDialog from '../../components/DeleteConfirmationDialog.
 
 const DEFAULT_CATALOG_PAGE_SIZE = 10
 
+function categorySlug(name) {
+  return name.trim().toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 function AdminMenuPage() {
   const { account } = useAuth()
   const isSuperAdmin = account.roles.includes('super_admin')
@@ -55,6 +63,7 @@ function AdminMenuPage() {
   const [branchOptionEdits, setBranchOptionEdits] = useState({})
   const [branchOptionsProduct, setBranchOptionsProduct] = useState(null)
   const [categoryName, setCategoryName] = useState('')
+  const [editingCategory, setEditingCategory] = useState(null)
   const [newProduct, setNewProduct] = useState({
     name: '', sku: '', description: '', price: '', categoryId: '',
   })
@@ -224,11 +233,8 @@ function AdminMenuPage() {
 
   async function createCategory(event) {
     event.preventDefault()
-    const slug = categoryName.trim().toLowerCase()
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
+    const name = categoryName.trim()
+    const slug = categorySlug(name)
     if (!slug) {
       setErrorMessage('Enter a category name containing letters or numbers.')
       return
@@ -237,21 +243,32 @@ function AdminMenuPage() {
     setErrorMessage('')
     setSuccessMessage('')
     try {
-      const { error } = await getSupabaseClient().from('categories').insert({
-        name: categoryName.trim(),
-        slug,
-      })
+      const query = editingCategory
+        ? getSupabaseClient().from('categories')
+          .update({ name, slug })
+          .eq('id', editingCategory.id)
+        : getSupabaseClient().from('categories').insert({ name, slug })
+      const { error } = await query
       if (error) throw new Error(error.message)
       setCategoryName('')
+      const updated = Boolean(editingCategory)
+      setEditingCategory(null)
       setCategoryDialogOpen(false)
       setMenuView('catalog')
-      setCategoryPage(0)
-      setSuccessMessage('Category created as unpublished.')
+      if (!updated) setCategoryPage(0)
+      setSuccessMessage(updated ? 'Category updated.' : 'Category created as unpublished.')
       setCatalogReloadKey((value) => value + 1)
     } catch (error) {
-      console.error('Unable to create menu category.', error)
+      console.error(editingCategory ? 'Unable to update menu category.' : 'Unable to create menu category.', error)
       setErrorMessage(error.message)
     } finally { setIsSaving(false) }
+  }
+
+  function openCategoryEditor(category = null) {
+    setErrorMessage('')
+    setCategoryName(category?.name || '')
+    setEditingCategory(category)
+    setCategoryDialogOpen(true)
   }
 
   async function publishCategory(category, isPublished) {
@@ -593,7 +610,7 @@ function AdminMenuPage() {
               {menuView === 'catalog' && (
                 <Button
                   variant="outlined"
-                  onClick={() => setCategoryDialogOpen(true)}
+                  onClick={() => openCategoryEditor()}
                   sx={{ width: { xs: '100%', sm: 'auto' }, minHeight: 42 }}
                 >
                   Add category
@@ -668,14 +685,23 @@ function AdminMenuPage() {
                             />
                           </TableCell>
                           <TableCell align="right">
-                            <Button
-                              size="small"
-                              color="error"
-                              onClick={() => requestMenuDelete('category', category)}
-                              disabled={isSaving}
-                            >
-                              Delete
-                            </Button>
+                            <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
+                              <Button
+                                size="small"
+                                onClick={() => openCategoryEditor(category)}
+                                disabled={isSaving}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                size="small"
+                                color="error"
+                                onClick={() => requestMenuDelete('category', category)}
+                                disabled={isSaving}
+                              >
+                                Delete
+                              </Button>
+                            </Stack>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -696,15 +722,30 @@ function AdminMenuPage() {
                 />
               )}
             </Box>
-            <Dialog open={categoryDialogOpen} onClose={() => !isSaving && setCategoryDialogOpen(false)} fullWidth maxWidth="xs">
+            <Dialog
+              open={categoryDialogOpen}
+              onClose={() => {
+                if (isSaving) return
+                setCategoryDialogOpen(false)
+                setEditingCategory(null)
+              }}
+              fullWidth
+              maxWidth="xs"
+            >
               <Box component="form" onSubmit={createCategory}>
-                <DialogTitle>Add category</DialogTitle>
+                <DialogTitle>{editingCategory ? 'Edit category' : 'Add category'}</DialogTitle>
                 <DialogContent>
+                  {errorMessage && <Alert severity="error" sx={{ mt: 1 }}>{errorMessage}</Alert>}
                   <TextField autoFocus fullWidth sx={{ mt: 1 }} label="Category name" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required slotProps={{ htmlInput: { maxLength: 100 } }} />
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2 }}>
-                  <Button onClick={() => setCategoryDialogOpen(false)} disabled={isSaving}>Cancel</Button>
-                  <Button type="submit" variant="contained" disabled={isSaving}>Create category</Button>
+                  <Button onClick={() => {
+                    setCategoryDialogOpen(false)
+                    setEditingCategory(null)
+                  }} disabled={isSaving}>Cancel</Button>
+                  <Button type="submit" variant="contained" disabled={isSaving}>
+                    {isSaving ? 'Saving…' : editingCategory ? 'Save changes' : 'Create category'}
+                  </Button>
                 </DialogActions>
               </Box>
             </Dialog>
