@@ -851,22 +851,7 @@ function AdminMenuPage() {
                                     ? 'Uses catalog price'
                                     : ''}
                               />
-                              {variants.some((variant) => variant.product_id === product.id) && (
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                                  {variants
-                                    .filter((variant) => variant.product_id === product.id && variant.is_active)
-                                    .map((variant) => {
-                                      const adjustment = branchEdit.priceOverride === ''
-                                        ? 0
-                                        : Number(branchEdit.priceOverride) - Number(product.price)
-                                      const sizeSetting = branchOptionSettings[`variant:${variant.id}`]
-                                      const effectivePrice = sizeSetting?.priceOverride ??
-                                        Math.max(0, Number(variant.price) + adjustment)
-                                      return `${variant.name}: ${formatPrice(effectivePrice)}${sizeSetting?.isAvailable === false ? ' (off)' : ''}`
-                                    })
-                                    .join(' · ')}
-                                </Typography>
-                              )}
+
                             </Box>
                             <FormControlLabel
                               sx={{ m: 0, pt: 0.5, flexShrink: 0 }}
