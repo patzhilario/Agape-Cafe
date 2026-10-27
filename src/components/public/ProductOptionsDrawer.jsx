@@ -21,6 +21,8 @@ import QuantityStepper from './QuantityStepper.jsx'
 import { formatPrice } from '../../features/public/publicData.js'
 
 export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
+  const isDrink = product.category?.type === 'drink'
+  const [servingType, setServingType] = useState('glass')
   const [variantId, setVariantId] = useState('')
   const [addonIds, setAddonIds] = useState([])
   const [quantity, setQuantity] = useState(1)
@@ -47,6 +49,7 @@ export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
         addons: selectedAddons.map(({ id, name, price }) => ({ id, name, price })),
         quantity,
         categoryType: product.category?.type || 'other',
+        servingType: isDrink ? servingType : null,
       })
     } catch (error) {
       console.error('Unable to add the configured product to the cart.', error)
@@ -154,6 +157,61 @@ export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
             <Alert severity="info">
               This item has one size. Base price: {formatPrice(product.price)}.
             </Alert>
+          )}
+ 
+          {isDrink && (
+            <FormControl required>
+              <Stack spacing={1.25}>
+                <Box>
+                  <Typography variant="h6" fontWeight={700}>Serving container (for Dine-in)</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Choose whether you prefer glass or a takeout cup.
+                  </Typography>
+                </Box>
+                <RadioGroup
+                  row
+                  name={`product-serving-${product.id}`}
+                  value={servingType}
+                  onChange={(event) => setServingType(event.target.value)}
+                  sx={{ gap: 1 }}
+                >
+                  {[
+                    { value: 'glass', label: 'Glass / Mug', subtitle: 'Eco-friendly (Dine-in)' },
+                    { value: 'cup', label: 'Takeout Cup', subtitle: 'Disposable cup' },
+                  ].map((option) => {
+                    const selected = option.value === servingType
+                    return (
+                      <Paper
+                        key={option.value}
+                        variant="outlined"
+                        sx={{
+                          flex: 1,
+                          borderRadius: 2.5,
+                          p: 1.5,
+                          borderColor: selected ? 'primary.main' : 'divider',
+                          bgcolor: selected ? 'rgba(91, 57, 39, 0.05)' : 'background.paper',
+                          cursor: 'pointer',
+                          transition: 'border-color 150ms ease',
+                        }}
+                        onClick={() => setServingType(option.value)}
+                      >
+                        <FormControlLabel
+                          value={option.value}
+                          control={<Radio />}
+                          label={
+                            <Box>
+                              <Typography fontWeight={600} variant="body2">{option.label}</Typography>
+                              <Typography variant="caption" color="text.secondary">{option.subtitle}</Typography>
+                            </Box>
+                          }
+                          sx={{ m: 0 }}
+                        />
+                      </Paper>
+                    )
+                  })}
+                </RadioGroup>
+              </Stack>
+            </FormControl>
           )}
 
           {product.addons.length > 0 && (

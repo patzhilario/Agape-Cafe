@@ -13,6 +13,8 @@ import {
   InputLabel,
   MenuItem,
   Paper,
+  Radio,
+  RadioGroup,
   Select,
   Stack,
   Typography,
@@ -41,6 +43,7 @@ export default function ProductPage() {
   const [loadedProduct, setLoadedProduct] = useState({ id: null, value: null })
   const [loadError, setLoadError] = useState({ id: null, message: '' })
   const [variantSelection, setVariantSelection] = useState({ productId: '', value: '' })
+  const [servingSelection, setServingSelection] = useState({ productId: '', value: 'glass' })
   const [addonSelection, setAddonSelection] = useState({ productId: '', values: [] })
   const [cartMessage, setCartMessage] = useState({ productId: '', severity: '', text: '' })
 
@@ -89,6 +92,9 @@ export default function ProductPage() {
       return
     }
 
+    const isDrink = product.category?.type === 'drink'
+    const chosenServing = servingSelection.productId === productId ? servingSelection.value : 'glass'
+
     try {
       addItem({
         productId: product.id,
@@ -104,6 +110,7 @@ export default function ProductPage() {
         })),
         quantity: 1,
         categoryType: product.category?.type || 'other',
+        servingType: isDrink ? chosenServing : null,
       })
       setCartMessage({ productId, severity: 'success', text: 'Added to your cart.' })
     } catch (error) {
@@ -199,6 +206,56 @@ export default function ProductPage() {
                       </MenuItem>
                     ))}
                   </Select>
+                </FormControl>
+              )}
+              {product.category?.type === 'drink' && (
+                <FormControl required fullWidth>
+                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                    Serving container (for Dine-in)
+                  </Typography>
+                  <RadioGroup
+                    row
+                    value={servingSelection.productId === productId ? servingSelection.value : 'glass'}
+                    onChange={(event) =>
+                      setServingSelection({ productId, value: event.target.value })
+                    }
+                    sx={{ gap: 1 }}
+                  >
+                    {[
+                      { value: 'glass', label: 'Glass / Mug', subtitle: 'Eco-friendly (Dine-in)' },
+                      { value: 'cup', label: 'Takeout Cup', subtitle: 'Disposable cup' },
+                    ].map((option) => {
+                      const currentVal = servingSelection.productId === productId ? servingSelection.value : 'glass'
+                      const selected = option.value === currentVal
+                      return (
+                        <Paper
+                          key={option.value}
+                          variant="outlined"
+                          sx={{
+                            flex: 1,
+                            borderRadius: 2,
+                            p: 1.5,
+                            borderColor: selected ? 'primary.main' : 'divider',
+                            bgcolor: selected ? 'rgba(91, 57, 39, 0.05)' : 'background.paper',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => setServingSelection({ productId, value: option.value })}
+                        >
+                          <FormControlLabel
+                            value={option.value}
+                            control={<Radio />}
+                            label={
+                              <Box>
+                                <Typography fontWeight={600} variant="body2">{option.label}</Typography>
+                                <Typography variant="caption" color="text.secondary">{option.subtitle}</Typography>
+                              </Box>
+                            }
+                            sx={{ m: 0 }}
+                          />
+                        </Paper>
+                      )
+                    })}
+                  </RadioGroup>
                 </FormControl>
               )}
               {product.addons.length > 0 && (

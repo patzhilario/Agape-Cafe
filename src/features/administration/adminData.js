@@ -25,7 +25,7 @@ export async function getOrders(branchId, page = 0, pageSize = 50, filters = {})
       subtotal, discount_total, total, created_at, cancellation_reason,
       branch:branches(name),
       items:order_items(
-        id, product_name, variant_name, quantity, line_total,
+        id, product_name, variant_name, quantity, line_total, serving_type,
         addons:order_item_addons(addon_name, unit_price)
       ),
       payment:payments(

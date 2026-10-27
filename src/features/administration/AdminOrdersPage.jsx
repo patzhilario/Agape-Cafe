@@ -561,6 +561,15 @@ export default function AdminOrdersPage() {
                           <Typography fontWeight={600}>
                             {item.quantity}× {item.product_name}
                             {item.variant_name ? ` · ${item.variant_name}` : ''}
+                            {item.serving_type && (
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                color={item.serving_type === 'cup' ? 'warning' : 'primary'}
+                                label={item.serving_type === 'cup' ? 'Takeout Cup' : 'Glass'}
+                                sx={{ ml: 1, height: 20, fontSize: '0.72rem' }}
+                              />
+                            )}
                           </Typography>
                           {item.addons?.length > 0 && (
                             <Typography variant="caption" color="text.secondary">

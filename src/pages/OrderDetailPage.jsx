@@ -275,6 +275,11 @@ export default function OrderDetailPage() {
                       <Typography>
                         {item.quantity} × {item.product_name}
                         {item.variant_name ? ` · ${item.variant_name}` : ''}
+                        {item.serving_type && (
+                          <span style={{ fontSize: '0.85em', opacity: 0.8, marginLeft: 6 }}>
+                            ({item.serving_type === 'cup' ? 'Takeout Cup' : 'Glass / Mug'})
+                          </span>
+                        )}
                       </Typography>
                       <Typography>{formatPrice(item.line_total)}</Typography>
                     </Stack>

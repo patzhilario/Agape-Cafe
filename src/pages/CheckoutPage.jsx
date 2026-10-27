@@ -1088,6 +1088,9 @@ export default function CheckoutPage({ panel = false }) {
                     <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between' }}>
                       <Typography variant="body2" color="text.secondary">
                         {item.variantName ? `Size: ${item.variantName}` : 'Base item'}
+                        {item.servingType && (
+                          <span> · {item.servingType === 'cup' ? 'Takeout Cup' : 'Glass / Mug'}</span>
+                        )}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         {formatPrice(basePrice)}

@@ -58,6 +58,7 @@ export async function createCustomerOrder({
     variant_id: item.variantId || null,
     addon_ids: item.addons.map((addon) => addon.id),
     quantity: item.quantity,
+    serving_type: item.servingType || null,
   }))
   const { data, error } = await getSupabaseClient().rpc('create_customer_order_with_table', {
     target_branch_id: branchId,
@@ -97,7 +98,7 @@ export async function getCustomerOrders(page = 0, pageSize = 25) {
       subtotal, discount_total, total, created_at,
       branch:branches(name),
       items:order_items(
-        id, product_name, product_sku, variant_name, quantity,
+        id, product_name, product_sku, variant_name, quantity, serving_type,
         unit_price, line_subtotal, discount_amount, line_total,
         addons:order_item_addons(addon_name, unit_price)
       ),
@@ -122,7 +123,7 @@ export async function getCustomerOrder(orderId) {
       subtotal, discount_total, total, promotion_id, created_at, cancellation_reason,
       branch:branches(name, address, phone, gcash_qr_path),
       items:order_items(
-        id, product_name, product_sku, variant_name, quantity,
+        id, product_name, product_sku, variant_name, quantity, serving_type,
         unit_price, line_subtotal, discount_amount, line_total,
         addons:order_item_addons(addon_name, unit_price)
       ),
