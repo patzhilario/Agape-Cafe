@@ -640,7 +640,7 @@ export default function CheckoutPage({ panel = false }) {
                         return (
                           <>
                             <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
-                              Eligible items: Maximum of <strong>1 Drink</strong> and <strong>1 Food</strong> per discount request for the cardholder.
+                              Eligible items: You can apply the discount to <strong>up to 1 Drink and/or 1 Food</strong> for the cardholder.
                             </Alert>
                             <Stack spacing={1}>
                               {items.map((item) => {
