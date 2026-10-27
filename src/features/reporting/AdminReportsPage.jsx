@@ -717,6 +717,7 @@ export default function AdminReportsPage() {
                   <PaginationControls
                     page={page}
                     pageSize={pageSize}
+                    totalItems={reportView === 'products' ? filteredProductSales.length : transactions.length}
                     hasNextPage={reportView === 'products'
                       ? (page + 1) * pageSize < filteredProductSales.length
                       : (page + 1) * pageSize < transactions.length}

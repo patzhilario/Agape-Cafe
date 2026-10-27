@@ -78,14 +78,14 @@ export async function getApproverBenefitRequests(branchId, page = 0, pageSize = 
         order_item_id, eligible_quantity, discount_amount,
         order_item:order_items(product_name, variant_name, quantity, line_total)
       )
-    `)
+    `, { count: 'exact' })
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .range(page * pageSize, (page + 1) * pageSize - 1)
   if (branchId) query = query.eq('branch_id', branchId)
-  const { data, error } = await query
+  const { data, error, count } = await query
   if (error) throw new Error(`Could not load benefit requests: ${error.message}`)
-  return data
+  return { data, count: count ?? 0 }
 }
 
 export async function reviewBenefitRequest(requestId, decision, note) {

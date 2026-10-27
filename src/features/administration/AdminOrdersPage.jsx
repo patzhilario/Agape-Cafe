@@ -70,6 +70,7 @@ export default function AdminOrdersPage() {
   const [branches, setBranches] = useState([])
   const [branchId, setBranchId] = useState('')
   const [orders, setOrders] = useState([])
+  const [totalOrderCount, setTotalOrderCount] = useState(0)
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [orderFilters, setOrderFilters] = useState({
@@ -118,8 +119,9 @@ export default function AdminOrdersPage() {
     setIsLoading(true)
     setErrorMessage('')
     try {
-      const loadedOrders = await getOrders(branchId, page, pageSize, orderFilters)
+      const { orders: loadedOrders, count } = await getOrders(branchId, page, pageSize, orderFilters)
       setOrders(loadedOrders)
+      setTotalOrderCount(count)
       const proofEntries = canEditOrders ? loadedOrders.flatMap((order) =>
         (order.payment_proof || [])
           .filter((proof) => proof.document_path)
@@ -856,6 +858,7 @@ export default function AdminOrdersPage() {
           <PaginationControls
             page={page}
             pageSize={pageSize}
+            totalItems={totalOrderCount}
             hasNextPage={orders.length === pageSize}
             isLoading={isLoading}
             onChange={(nextPage, nextPageSize) => {

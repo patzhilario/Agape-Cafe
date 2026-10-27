@@ -143,6 +143,7 @@ function readableDetails(details = {}) {
 
 export default function AdminAuditPage() {
   const [logs, setLogs] = useState([])
+  const [totalLogCount, setTotalLogCount] = useState(0)
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [reloadKey, setReloadKey] = useState(0)
@@ -157,14 +158,15 @@ export default function AdminAuditPage() {
         id, action, record_type, details, created_at,
         actor:profiles!audit_logs_actor_id_fkey(display_name, email),
         branch:branches!audit_logs_branch_id_fkey(name)
-      `)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .range(page * pageSize, (page + 1) * pageSize - 1)
-      .then(({ data, error }) => {
+      .then(({ data, error, count }) => {
         if (error) throw new Error(error.message)
         if (active) {
           setLogs(data)
+          setTotalLogCount(count ?? 0)
           setErrorMessage('')
         }
       })
@@ -257,6 +259,7 @@ export default function AdminAuditPage() {
           <PaginationControls
             page={page}
             pageSize={pageSize}
+            totalItems={totalLogCount}
             hasNextPage={logs.length === pageSize}
             isLoading={isLoading}
             onChange={(nextPage, nextPageSize) => {

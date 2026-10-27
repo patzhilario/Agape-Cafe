@@ -105,7 +105,7 @@ export async function getCustomerOrders(page = 0, pageSize = 25) {
       payment:payments(payment_method_code, payment_method_name, amount, status),
       payment_proof:order_payment_proofs(id, status, document_path, reference_number, review_note),
       benefit_request:benefit_discount_requests(id, benefit_type, status, document_path, review_note, discount_total)
-    `)
+    `, { count: 'exact' })
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .range(page * pageSize, (page + 1) * pageSize - 1)
@@ -115,7 +115,7 @@ export async function getCustomerOrders(page = 0, pageSize = 25) {
 }
 
 export async function getCustomerOrder(orderId) {
-  const { data, error } = await getSupabaseClient()
+  const { data, error, count } = await getSupabaseClient()
     .from('orders')
     .select(`
       id, order_number, branch_id, customer_name, customer_email, customer_phone,
@@ -137,7 +137,7 @@ export async function getCustomerOrder(orderId) {
     .maybeSingle()
 
   if (error) throw new Error(`Could not load order details: ${error.message}`)
-  return data
+  return { data, count: count ?? 0 }
 }
 
 export async function submitOrderPaymentProof(orderId, documentPath, referenceNumber) {

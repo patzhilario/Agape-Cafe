@@ -625,6 +625,7 @@ function AdminInventoryPage() {
           <PaginationControls
             page={inventoryPage}
             pageSize={inventoryPageSize}
+            totalItems={filteredIngredients.length}
             hasNextPage={(inventoryPage + 1) * inventoryPageSize < filteredIngredients.length}
             isLoading={stockBranchId !== branchId}
             onChange={(nextPage, nextPageSize) => {
@@ -771,6 +772,7 @@ function AdminInventoryPage() {
                     <PaginationControls
                       page={inventoryPage}
                       pageSize={inventoryPageSize}
+                      totalItems={filteredIngredients.length}
                       hasNextPage={(inventoryPage + 1) * inventoryPageSize < filteredIngredients.length}
                       isLoading={stockBranchId !== branchId}
                       onChange={(nextPage, nextPageSize) => {

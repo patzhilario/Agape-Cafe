@@ -599,6 +599,7 @@ export default function AccessManagementPage() {
                 <PaginationControls
                   page={visibleAccountPage}
                   pageSize={accountPageSize}
+                  totalItems={filteredUsers.length}
                   hasNextPage={(visibleAccountPage + 1) * accountPageSize < filteredUsers.length}
                   isLoading={isLoading}
                   onChange={(nextPage, nextPageSize) => {

@@ -212,6 +212,7 @@ export default function AdminFinancialsPage() {
   const [salesTrendState, setSalesTrendState] = useState({ key: '', data: [] })
   const [salesTrendError, setSalesTrendError] = useState({ key: '', message: '' })
   const [expenses, setExpenses] = useState([])
+  const [totalExpenseCount, setTotalExpenseCount] = useState(0)
   const [expensePage, setExpensePage] = useState(0)
   const [expensePageSize, setExpensePageSize] = useState(DEFAULT_PAGE_SIZE)
   const [expenseForm, setExpenseForm] = useState(emptyExpense)
@@ -256,7 +257,8 @@ export default function AdminFinancialsPage() {
       .then(([report, loadedExpenses]) => {
         if (!active) return
         setSummary(report)
-        setExpenses(loadedExpenses)
+        setExpenses(loadedExpenses.data)
+        setTotalExpenseCount(loadedExpenses.count)
       })
       .catch((error) => {
         console.error('Unable to load financial report and expenses.', error)
@@ -772,6 +774,7 @@ export default function AdminFinancialsPage() {
                 <PaginationControls
                   page={expensePage}
                   pageSize={expensePageSize}
+                  totalItems={totalExpenseCount}
                   hasNextPage={expenses.length === expensePageSize}
                   isLoading={isLoading}
                   onChange={(nextPage, nextPageSize) => {

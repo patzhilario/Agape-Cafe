@@ -198,7 +198,7 @@ export async function getFinancialReport(branchId, startDate, endDate) {
 export async function getBranchExpenses(branchId, startDate, endDate, page = 0, pageSize = 50) {
   let query = getSupabaseClient()
     .from('branch_expenses')
-    .select('id, branch_id, occurred_on, category, description, amount, note, created_at, voided_at, void_reason')
+    .select('id, branch_id, occurred_on, category, description, amount, note, created_at, voided_at, void_reason', { count: 'exact' })
     .gte('occurred_on', startDate)
     .lte('occurred_on', endDate)
     .order('occurred_on', { ascending: false })
@@ -206,14 +206,16 @@ export async function getBranchExpenses(branchId, startDate, endDate, page = 0, 
     .order('id', { ascending: false })
     .range(page * pageSize, (page + 1) * pageSize - 1)
   if (branchId) query = query.eq('branch_id', branchId)
-  return unwrap(await query, 'Could not load branch expenses')
+  const result = await query
+  if (result.error) throw new Error(`Could not load branch expenses: ${result.error.message}`)
+  return { data: result.data, count: result.count ?? 0 }
 }
 
 export async function getAllBranchExpenses(branchId, startDate, endDate) {
   const pageSize = 250
   const allExpenses = []
   for (let page = 0; ; page += 1) {
-    const nextExpenses = await getBranchExpenses(
+    const { data: nextExpenses } = await getBranchExpenses(
       branchId,
       startDate,
       endDate,
@@ -223,7 +225,7 @@ export async function getAllBranchExpenses(branchId, startDate, endDate) {
     allExpenses.push(...nextExpenses)
     if (nextExpenses.length < pageSize) return allExpenses
     if (allExpenses.length >= 10000) {
-      const overflow = await getBranchExpenses(
+      const { data: overflow } = await getBranchExpenses(
         branchId,
         startDate,
         endDate,

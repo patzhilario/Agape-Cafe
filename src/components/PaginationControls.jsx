@@ -9,7 +9,8 @@ import {
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 
-export default function PaginationControls({ page, pageSize, hasNextPage, isLoading, onChange }) {
+export default function PaginationControls({ page, pageSize, totalItems, hasNextPage, isLoading, onChange }) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
   return (
     <Box
       component="nav"
@@ -47,13 +48,13 @@ export default function PaginationControls({ page, pageSize, hasNextPage, isLoad
           <Box
             aria-current="page"
             sx={{
-              minWidth: 54,
+              minWidth: 88,
               px: 0.75,
               textAlign: 'center',
             }}
           >
             <Typography variant="caption" fontWeight={700} sx={{ whiteSpace: 'nowrap' }}>
-              Page {page + 1}
+              Page {page + 1} of {totalPages}
             </Typography>
           </Box>
           <Button

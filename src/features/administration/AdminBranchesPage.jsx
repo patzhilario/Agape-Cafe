@@ -597,6 +597,7 @@ export default function AdminBranchesPage() {
             <PaginationControls
               page={branchPage}
               pageSize={branchPageSize}
+              totalItems={branches.length}
               hasNextPage={(branchPage + 1) * branchPageSize < branches.length}
               isLoading={isLoading}
               onChange={(nextPage, nextPageSize) => {

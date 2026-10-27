@@ -752,6 +752,7 @@ function AdminMenuPage() {
                 <PaginationControls
                   page={categoryPage}
                   pageSize={categoryPageSize}
+                  totalItems={filteredCategories.length}
                   hasNextPage={(categoryPage + 1) * categoryPageSize < filteredCategories.length}
                   isLoading={isLoading}
                   onChange={(nextPage, nextPageSize) => {
@@ -936,6 +937,7 @@ function AdminMenuPage() {
               <PaginationControls
                 page={branchPage}
                 pageSize={branchPageSize}
+                totalItems={filteredBranchProducts.length}
                 hasNextPage={(branchPage + 1) * branchPageSize < filteredBranchProducts.length}
                 isLoading={isLoading}
                 onChange={(nextPage, nextPageSize) => {
@@ -1173,6 +1175,7 @@ function AdminMenuPage() {
             <PaginationControls
               page={productPage}
               pageSize={productPageSize}
+              totalItems={filteredProducts.length}
               hasNextPage={(productPage + 1) * productPageSize < filteredProducts.length}
               isLoading={isLoading}
               onChange={(nextPage, nextPageSize) => {

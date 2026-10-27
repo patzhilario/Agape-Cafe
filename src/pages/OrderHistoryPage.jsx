@@ -42,6 +42,7 @@ function formatStatus(value) {
 
 export default function OrderHistoryPage() {
   const [orders, setOrders] = useState([])
+  const [totalOrderCount, setTotalOrderCount] = useState(0)
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
@@ -51,9 +52,10 @@ export default function OrderHistoryPage() {
   useEffect(() => {
     let active = true
     getCustomerOrders(page, pageSize)
-      .then((data) => {
+      .then(({ data, count }) => {
         if (active) {
           setOrders(data)
+          setTotalOrderCount(count)
           setErrorMessage('')
         }
       })
@@ -164,6 +166,7 @@ export default function OrderHistoryPage() {
             <PaginationControls
               page={page}
               pageSize={pageSize}
+              totalItems={totalOrderCount}
               hasNextPage={orders.length === pageSize}
               isLoading={isLoading}
               onChange={(nextPage, nextPageSize) => {

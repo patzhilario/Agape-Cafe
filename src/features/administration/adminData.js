@@ -40,7 +40,7 @@ export async function getOrders(branchId, page = 0, pageSize = 50, filters = {})
           order_item:order_items(product_name, variant_name, quantity)
         )
       )
-    `)
+    `, { count: 'exact' })
     .order('created_at', { ascending: true })
     .order('id', { ascending: true })
     .range(page * pageSize, (page + 1) * pageSize - 1)
@@ -50,7 +50,7 @@ export async function getOrders(branchId, page = 0, pageSize = 50, filters = {})
   if (filters.fulfillmentMethod) query = query.eq('fulfillment_method', filters.fulfillmentMethod)
   if (filters.dateFrom) query = query.gte('created_at', `${filters.dateFrom}T00:00:00`)
   if (filters.dateTo) query = query.lte('created_at', `${filters.dateTo}T23:59:59.999`)
-  const { data, error } = await query
+  const { data, error, count } = await query
   if (error) throw new Error(`Could not load orders: ${error.message}`)
   const orders = data.map((order) => ({
     ...order,
@@ -59,12 +59,15 @@ export async function getOrders(branchId, page = 0, pageSize = 50, filters = {})
     benefit_request: relationshipArray(order.benefit_request),
   }))
   // Unpaid orders float to the top (first-come, first-served within each group)
-  return orders.sort((a, b) => {
-    const aUnpaid = a.payment_status === 'unpaid' ? 0 : 1
-    const bUnpaid = b.payment_status === 'unpaid' ? 0 : 1
-    if (aUnpaid !== bUnpaid) return aUnpaid - bUnpaid
-    return new Date(a.created_at) - new Date(b.created_at)
-  })
+  return {
+    orders: orders.sort((a, b) => {
+      const aUnpaid = a.payment_status === 'unpaid' ? 0 : 1
+      const bUnpaid = b.payment_status === 'unpaid' ? 0 : 1
+      if (aUnpaid !== bUnpaid) return aUnpaid - bUnpaid
+      return new Date(a.created_at) - new Date(b.created_at)
+    }),
+    count: count ?? 0,
+  }
 }
 
 export async function updateOrderStatus(orderId, status, cancellationReason = null) {

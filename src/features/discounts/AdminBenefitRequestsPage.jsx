@@ -53,6 +53,7 @@ export default function AdminBenefitRequestsPage() {
   const [branches, setBranches] = useState([])
   const [branchId, setBranchId] = useState('')
   const [requests, setRequests] = useState([])
+  const [totalRequestCount, setTotalRequestCount] = useState(0)
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [reviewNotes, setReviewNotes] = useState({})
@@ -85,9 +86,10 @@ export default function AdminBenefitRequestsPage() {
   useEffect(() => {
     let active = true
     getApproverBenefitRequests(branchId, page, pageSize)
-      .then((data) => {
+      .then(({ data, count }) => {
         if (active) {
           setRequests(data)
+          setTotalRequestCount(count)
           setErrorMessage('')
         }
       })
@@ -337,6 +339,7 @@ export default function AdminBenefitRequestsPage() {
           <PaginationControls
             page={page}
             pageSize={pageSize}
+            totalItems={totalRequestCount}
             hasNextPage={requests.length === pageSize}
             isLoading={isLoading}
             onChange={(nextPage, nextPageSize) => {
