@@ -41,8 +41,8 @@ export async function getOrders(branchId, page = 0, pageSize = 50, filters = {})
         )
       )
     `)
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
     .range(page * pageSize, (page + 1) * pageSize - 1)
   if (branchId) query = query.eq('branch_id', branchId)
   if (filters.status) query = query.eq('status', filters.status)
@@ -52,12 +52,19 @@ export async function getOrders(branchId, page = 0, pageSize = 50, filters = {})
   if (filters.dateTo) query = query.lte('created_at', `${filters.dateTo}T23:59:59.999`)
   const { data, error } = await query
   if (error) throw new Error(`Could not load orders: ${error.message}`)
-  return data.map((order) => ({
+  const orders = data.map((order) => ({
     ...order,
     payment: relationshipArray(order.payment),
     payment_proof: relationshipArray(order.payment_proof),
     benefit_request: relationshipArray(order.benefit_request),
   }))
+  // Unpaid orders float to the top (first-come, first-served within each group)
+  return orders.sort((a, b) => {
+    const aUnpaid = a.payment_status === 'unpaid' ? 0 : 1
+    const bUnpaid = b.payment_status === 'unpaid' ? 0 : 1
+    if (aUnpaid !== bUnpaid) return aUnpaid - bUnpaid
+    return new Date(a.created_at) - new Date(b.created_at)
+  })
 }
 
 export async function updateOrderStatus(orderId, status, cancellationReason = null) {
