@@ -25,6 +25,7 @@ export default function DeleteConfirmationDialog({
     <Dialog
       open={open}
       onClose={() => !isDeleting && onCancel()}
+      disableRestoreFocus
       fullWidth
       maxWidth="xs"
     >

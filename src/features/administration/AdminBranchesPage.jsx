@@ -612,6 +612,7 @@ export default function AdminBranchesPage() {
       <Dialog
         open={dialogOpen}
         onClose={() => !isSaving && !isSavingPaymentMethod && !isSavingDiningTable && setDialogOpen(false)}
+        disableRestoreFocus
         fullWidth
         maxWidth="md"
       >
@@ -919,6 +920,7 @@ export default function AdminBranchesPage() {
       <Dialog
         open={diningTableDialogOpen}
         onClose={() => !isSavingDiningTable && setDiningTableDialogOpen(false)}
+        disableRestoreFocus
         fullWidth
         maxWidth="xs"
       >

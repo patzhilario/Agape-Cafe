@@ -146,7 +146,10 @@ function BranchCard({ branch }) {
         <Button
           variant="outlined"
           endIcon={<OpenInNewIcon />}
-          onClick={() => setMapOpen(true)}
+          onClick={(event) => {
+            event.currentTarget.blur()
+            setMapOpen(true)
+          }}
           sx={{ minHeight: 42, justifySelf: { md: 'end' }, whiteSpace: 'nowrap' }}
         >
           View on map
@@ -155,6 +158,7 @@ function BranchCard({ branch }) {
       <Dialog
         open={mapOpen}
         onClose={() => setMapOpen(false)}
+        disableRestoreFocus
         fullWidth
         maxWidth="md"
         aria-labelledby={`branch-map-title-${branch.id}`}
