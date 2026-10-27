@@ -134,10 +134,7 @@ function AdminMenuPage() {
       (permission.action === 'edit' || permission.action === 'manage'),
     )
   )
-  const publishedCategories = useMemo(
-    () => categories.filter((category) => category.is_published),
-    [categories],
-  )
+
 
   useEffect(() => {
     let active = true
@@ -1389,11 +1386,7 @@ function AdminMenuPage() {
           ) : <Alert severity="info">No products are configured. Add real catalog records; no sample products are created.</Alert>}
           </Box>
         </>}
-        {menuView === 'catalog' && publishedCategories.length > 0 && (
-          <Typography variant="body2" color="text.secondary">
-            Published categories: {publishedCategories.map((category) => category.name).join(', ')}
-          </Typography>
-        )}
+
       </Stack>
       <DeleteConfirmationDialog
         open={Boolean(deleteTarget)}
