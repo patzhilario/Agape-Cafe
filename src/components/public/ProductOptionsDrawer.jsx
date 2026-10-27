@@ -46,6 +46,7 @@ export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
         variantPrice: variant?.price ?? product.price,
         addons: selectedAddons.map(({ id, name, price }) => ({ id, name, price })),
         quantity,
+        categoryType: product.category?.type || 'other',
       })
     } catch (error) {
       console.error('Unable to add the configured product to the cart.', error)

@@ -63,6 +63,7 @@ function AdminMenuPage() {
   const [branchOptionEdits, setBranchOptionEdits] = useState({})
   const [branchOptionsProduct, setBranchOptionsProduct] = useState(null)
   const [categoryName, setCategoryName] = useState('')
+  const [categoryType, setCategoryType] = useState('other')
   const [editingCategory, setEditingCategory] = useState(null)
   const [newProduct, setNewProduct] = useState({
     name: '', sku: '', description: '', price: '', categoryId: '',
@@ -141,7 +142,7 @@ function AdminMenuPage() {
     Promise.all([
       getAdminBranches(account),
       getSupabaseClient().from('categories')
-        .select('id, name, slug, is_published')
+        .select('id, name, slug, type, is_published')
         .order('sort_order')
         .then(({ data, error }) => {
           if (error) throw new Error(error.message)
@@ -266,12 +267,13 @@ function AdminMenuPage() {
     try {
       const query = editingCategory
         ? getSupabaseClient().from('categories')
-          .update({ name, slug })
+          .update({ name, slug, type: categoryType })
           .eq('id', editingCategory.id)
-        : getSupabaseClient().from('categories').insert({ name, slug })
+        : getSupabaseClient().from('categories').insert({ name, slug, type: categoryType })
       const { error } = await query
       if (error) throw new Error(error.message)
       setCategoryName('')
+      setCategoryType('other')
       const updated = Boolean(editingCategory)
       setEditingCategory(null)
       setCategoryDialogOpen(false)
@@ -288,6 +290,7 @@ function AdminMenuPage() {
   function openCategoryEditor(category = null) {
     setErrorMessage('')
     setCategoryName(category?.name || '')
+    setCategoryType(category?.type || 'other')
     setEditingCategory(category)
     setCategoryDialogOpen(true)
   }
@@ -773,6 +776,19 @@ function AdminMenuPage() {
                 <DialogContent>
                   {errorMessage && <Alert severity="error" sx={{ mt: 1 }}>{errorMessage}</Alert>}
                   <TextField autoFocus fullWidth sx={{ mt: 1 }} label="Category name" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required slotProps={{ htmlInput: { maxLength: 100 } }} />
+                  <FormControl fullWidth sx={{ mt: 2 }}>
+                    <InputLabel id="category-type-select-label">Category type</InputLabel>
+                    <Select
+                      labelId="category-type-select-label"
+                      label="Category type"
+                      value={categoryType}
+                      onChange={(event) => setCategoryType(event.target.value)}
+                    >
+                      <MenuItem value="drink">Drink (Coffee, Tea, Beverages)</MenuItem>
+                      <MenuItem value="food">Food (Meals, Pastries, Snacks)</MenuItem>
+                      <MenuItem value="other">Other / Merch / Retail</MenuItem>
+                    </Select>
+                  </FormControl>
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2 }}>
                   <Button onClick={() => {

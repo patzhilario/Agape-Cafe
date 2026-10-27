@@ -103,6 +103,7 @@ export default function ProductPage() {
           price: addon.price,
         })),
         quantity: 1,
+        categoryType: product.category?.type || 'other',
       })
       setCartMessage({ productId, severity: 'success', text: 'Added to your cart.' })
     } catch (error) {

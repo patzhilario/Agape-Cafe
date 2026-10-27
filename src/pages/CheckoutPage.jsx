@@ -256,6 +256,27 @@ export default function CheckoutPage({ panel = false }) {
       setErrorMessage('Select at least one item for the eligible person.')
       return
     }
+    const drinkCount = selectedBenefitItems
+      .filter((item) => (item.categoryType || 'other') === 'drink')
+      .reduce((sum, item) => sum + item.eligibleQuantity, 0)
+    const foodCount = selectedBenefitItems
+      .filter((item) => (item.categoryType || 'other') === 'food')
+      .reduce((sum, item) => sum + item.eligibleQuantity, 0)
+    const otherItems = selectedBenefitItems
+      .filter((item) => !['drink', 'food'].includes(item.categoryType))
+
+    if (drinkCount > 1 || foodCount > 1 || otherItems.length > 0) {
+      if (drinkCount > 1 && foodCount > 1) {
+        setErrorMessage('PWD/Senior Citizen discount is valid for a maximum of 1 drink and 1 food only.')
+      } else if (drinkCount > 1) {
+        setErrorMessage('PWD/Senior Citizen discount is valid for a maximum of 1 drink only.')
+      } else if (foodCount > 1) {
+        setErrorMessage('PWD/Senior Citizen discount is valid for a maximum of 1 food only.')
+      } else if (otherItems.length > 0) {
+        setErrorMessage('PWD/Senior Citizen discount only applies to drink and food items.')
+      }
+      return
+    }
     if (selectedBenefitItems.some((item) =>
       !Number.isInteger(item.eligibleQuantity) || item.eligibleQuantity > item.quantity,
     )) {
@@ -608,45 +629,91 @@ export default function CheckoutPage({ panel = false }) {
                           {benefitPolicy.senior_citizen_enabled && <MenuItem value="senior_citizen">Senior Citizen</MenuItem>}
                         </Select>
                       </FormControl>
-                      <Stack spacing={1}>
-                        {items.map((item) => {
-                          const key = getCartItemKey(item)
-                          const eligibleQuantity = Number(benefitQuantities[key] || 0)
-                          return (
-                            <Stack key={key} direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
-                              <FormControlLabel
-                                control={
-                                  <Checkbox
-                                    checked={eligibleQuantity > 0}
-                                    onChange={(event) => setBenefitQuantities((current) => {
-                                      if (!event.target.checked) {
-                                        const next = { ...current }
-                                        delete next[key]
-                                        return next
+                      {(() => {
+                        const selectedDrinks = items
+                          .filter((i) => (i.categoryType || 'other') === 'drink' && Number(benefitQuantities[getCartItemKey(i)] || 0) > 0)
+                        const selectedFoods = items
+                          .filter((i) => (i.categoryType || 'other') === 'food' && Number(benefitQuantities[getCartItemKey(i)] || 0) > 0)
+                        const hasDrink = selectedDrinks.length > 0
+                        const hasFood = selectedFoods.length > 0
+
+                        return (
+                          <>
+                            <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
+                              Eligible items: Maximum of <strong>1 Drink</strong> and <strong>1 Food</strong> per discount request for the cardholder.
+                            </Alert>
+                            <Stack spacing={1}>
+                              {items.map((item) => {
+                                const key = getCartItemKey(item)
+                                const eligibleQuantity = Number(benefitQuantities[key] || 0)
+                                const isDrink = (item.categoryType || 'other') === 'drink'
+                                const isFood = (item.categoryType || 'other') === 'food'
+                                const isOther = !isDrink && !isFood
+                                const isChecked = eligibleQuantity > 0
+                                // Disabled if it's "other", or if another drink is already selected, or another food is already selected
+                                const isDisabled = isOther || (!isChecked && ((isDrink && hasDrink) || (isFood && hasFood)))
+
+                                let helperText = ''
+                                if (isOther) helperText = '(Not eligible: retail/other)'
+                                else if (!isChecked && isDrink && hasDrink) helperText = '(1 drink already selected)'
+                                else if (!isChecked && isFood && hasFood) helperText = '(1 food already selected)'
+
+                                return (
+                                  <Stack key={key} direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
+                                    <FormControlLabel
+                                      control={
+                                        <Checkbox
+                                          checked={isChecked}
+                                          disabled={isDisabled}
+                                          onChange={(event) => setBenefitQuantities((current) => {
+                                            if (!event.target.checked) {
+                                              const next = { ...current }
+                                              delete next[key]
+                                              return next
+                                            }
+                                            return { ...current, [key]: 1 }
+                                          })}
+                                        />
                                       }
-                                      return { ...current, [key]: item.quantity }
-                                    })}
-                                  />
-                                }
-                                label={`${item.productName}${item.variantName ? ` · ${item.variantName}` : ''}`}
-                              />
-                              {eligibleQuantity > 0 && (
-                                <TextField
-                                  label={`Eligible quantity (max ${item.quantity})`}
-                                  type="number"
-                                  value={eligibleQuantity}
-                                  onChange={(event) => setBenefitQuantities((current) => ({
-                                    ...current,
-                                    [key]: event.target.value,
-                                  }))}
-                                  slotProps={{ htmlInput: { min: 1, max: item.quantity, step: 1 } }}
-                                  required
-                                />
-                              )}
+                                      label={
+                                        <span>
+                                          {item.productName}{item.variantName ? ` · ${item.variantName}` : ''}{' '}
+                                          <span style={{ fontSize: '0.8em', opacity: 0.75, textTransform: 'uppercase' }}>
+                                            [{isDrink ? 'Drink' : isFood ? 'Food' : 'Other'}]
+                                          </span>
+                                          {helperText && (
+                                            <span style={{ fontSize: '0.78em', color: '#d32f2f', marginLeft: 6 }}>
+                                              {helperText}
+                                            </span>
+                                          )}
+                                        </span>
+                                      }
+                                    />
+                                    {isChecked && (
+                                      <TextField
+                                        size="small"
+                                        label="Discount qty (max 1)"
+                                        type="number"
+                                        value={eligibleQuantity}
+                                        onChange={(event) => {
+                                          const val = Math.min(1, Math.max(1, parseInt(event.target.value, 10) || 1))
+                                          setBenefitQuantities((current) => ({
+                                            ...current,
+                                            [key]: val,
+                                          }))
+                                        }}
+                                        slotProps={{ htmlInput: { min: 1, max: 1, step: 1 } }}
+                                        sx={{ width: 140 }}
+                                        required
+                                      />
+                                    )}
+                                  </Stack>
+                                )
+                              })}
                             </Stack>
-                          )
-                        })}
-                      </Stack>
+                          </>
+                        )
+                      })()}
                       <Button
                         component="label"
                         variant="outlined"

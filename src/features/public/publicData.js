@@ -78,7 +78,7 @@ function productSelection() {
     price,
     is_featured,
     is_best_seller,
-    category:categories(name, slug),
+    category:categories(name, slug, type),
     product_variants(id, name, price, sort_order, is_active),
     product_addons(id, name, price, sort_order, is_active)
   `
