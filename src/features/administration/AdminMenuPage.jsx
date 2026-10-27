@@ -88,18 +88,42 @@ function AdminMenuPage() {
   const [productPageSize, setProductPageSize] = useState(DEFAULT_CATALOG_PAGE_SIZE)
   const [categoryPage, setCategoryPage] = useState(0)
   const [categoryPageSize, setCategoryPageSize] = useState(DEFAULT_CATALOG_PAGE_SIZE)
+  const [branchSearch, setBranchSearch] = useState('')
+  const [productSearch, setProductSearch] = useState('')
+  const [categorySearch, setCategorySearch] = useState('')
   const editingProduct = products.find((product) => product.id === editingProductId)
+  const filteredBranchProducts = useMemo(() => {
+    const q = branchSearch.trim().toLowerCase()
+    if (!q) return products
+    return products.filter((p) =>
+      p.name.toLowerCase().includes(q) ||
+      (p.sku && p.sku.toLowerCase().includes(q)),
+    )
+  }, [products, branchSearch])
+  const filteredProducts = useMemo(() => {
+    const q = productSearch.trim().toLowerCase()
+    if (!q) return products
+    return products.filter((p) =>
+      p.name.toLowerCase().includes(q) ||
+      (p.sku && p.sku.toLowerCase().includes(q)),
+    )
+  }, [products, productSearch])
+  const filteredCategories = useMemo(() => {
+    const q = categorySearch.trim().toLowerCase()
+    if (!q) return categories
+    return categories.filter((c) => c.name.toLowerCase().includes(q))
+  }, [categories, categorySearch])
   const paginatedBranchProducts = useMemo(
-    () => products.slice(branchPage * branchPageSize, (branchPage + 1) * branchPageSize),
-    [branchPage, branchPageSize, products],
+    () => filteredBranchProducts.slice(branchPage * branchPageSize, (branchPage + 1) * branchPageSize),
+    [branchPage, branchPageSize, filteredBranchProducts],
   )
   const paginatedProducts = useMemo(
-    () => products.slice(productPage * productPageSize, (productPage + 1) * productPageSize),
-    [productPage, productPageSize, products],
+    () => filteredProducts.slice(productPage * productPageSize, (productPage + 1) * productPageSize),
+    [productPage, productPageSize, filteredProducts],
   )
   const paginatedCategories = useMemo(
-    () => categories.slice(categoryPage * categoryPageSize, (categoryPage + 1) * categoryPageSize),
-    [categories, categoryPage, categoryPageSize],
+    () => filteredCategories.slice(categoryPage * categoryPageSize, (categoryPage + 1) * categoryPageSize),
+    [filteredCategories, categoryPage, categoryPageSize],
   )
 
   const canEditBranchMenu = isSuperAdmin || (
@@ -647,6 +671,9 @@ function AdminMenuPage() {
             setBranchPage(0)
             setProductPage(0)
             setCategoryPage(0)
+            setBranchSearch('')
+            setProductSearch('')
+            setCategorySearch('')
           }}
           aria-label="Menu management sections"
         >
@@ -669,7 +696,19 @@ function AdminMenuPage() {
           <>
             <Box>
               <Typography variant="h6" sx={{ mb: 1 }}>Categories</Typography>
-              {categories.length ? (
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search categories…"
+                value={categorySearch}
+                onChange={(event) => {
+                  setCategorySearch(event.target.value)
+                  setCategoryPage(0)
+                }}
+                aria-label="Search categories"
+                sx={{ mb: 1.5 }}
+              />
+              {filteredCategories.length ? (
                 <TableContainer component={Paper} variant="outlined">
                   <Table size="small" aria-label="Menu categories" sx={{ minWidth: 540 }}>
                     <TableHead><TableRow><TableCell>Category</TableCell><TableCell>Slug</TableCell><TableCell>Status</TableCell><TableCell align="right">Actions</TableCell></TableRow></TableHead>
@@ -708,12 +747,12 @@ function AdminMenuPage() {
                     </TableBody>
                   </Table>
                 </TableContainer>
-              ) : <Alert severity="info">No categories yet. Add one to organize the menu.</Alert>}
-              {categories.length > 0 && (
+              ) : <Alert severity="info">{categories.length === 0 ? 'No categories yet. Add one to organize the menu.' : 'No categories match your search.'}</Alert>}
+              {filteredCategories.length > 0 && (
                 <PaginationControls
                   page={categoryPage}
                   pageSize={categoryPageSize}
-                  hasNextPage={(categoryPage + 1) * categoryPageSize < categories.length}
+                  hasNextPage={(categoryPage + 1) * categoryPageSize < filteredCategories.length}
                   isLoading={isLoading}
                   onChange={(nextPage, nextPageSize) => {
                     setCategoryPage(nextPage)
@@ -753,14 +792,26 @@ function AdminMenuPage() {
         )}
         {menuView === 'branch' && (
           <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search products by name or SKU…"
+                value={branchSearch}
+                onChange={(event) => {
+                  setBranchSearch(event.target.value)
+                  setBranchPage(0)
+                }}
+                aria-label="Search branch menu products"
+              />
+            </Box>
             <TableContainer>
               <Table aria-label="Branch menu availability and pricing" sx={{ minWidth: 760 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell>Product</TableCell>
                     <TableCell>Catalog price</TableCell>
-                    <TableCell>Branch price</TableCell>
-                    <TableCell>Available</TableCell>
+                    <TableCell>Branch price &amp; availability</TableCell>
                     <TableCell align="right">Action</TableCell>
                   </TableRow>
                 </TableHead>
@@ -774,68 +825,70 @@ function AdminMenuPage() {
                       priceOverride: branchEntry?.price_override == null ? '' : String(branchEntry.price_override),
                     }
                     return (
-                      <TableRow key={product.id} hover>
-                        <TableCell>
+                      <TableRow key={product.id} hover sx={{ verticalAlign: 'top' }}>
+                        <TableCell sx={{ verticalAlign: 'top', pt: 2 }}>
                           <Typography fontWeight={700}>{product.name}</Typography>
                           <Typography variant="body2" color="text.secondary">{product.sku}</Typography>
                         </TableCell>
-                        <TableCell>{formatPrice(product.price)}</TableCell>
-                        <TableCell>
-                          <TextField
-                            size="small"
-                            aria-label={`Branch price for ${product.name}`}
-                            type="number"
-                            value={branchEdit.priceOverride}
-                            placeholder="Use catalog price"
-                            disabled={!branchId || availabilityBranchId !== branchId || !canEditBranchMenu || isSaving}
-                            onChange={(event) => setBranchEdits((state) => ({
-                              ...state,
-                              [product.id]: { ...branchEdit, priceOverride: event.target.value },
-                            }))}
-                            slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
-                            helperText={variants.some((variant) => variant.product_id === product.id)
-                              ? branchEdit.priceOverride === ''
-                                ? 'Sizes follow catalog prices'
-                                : 'Adjusts all size prices by the same amount'
-                              : branchEdit.priceOverride === ''
-                                ? 'Uses catalog price'
-                                : ''}
-                          />
-                          {variants.some((variant) => variant.product_id === product.id) && (
-                            <Typography variant="caption" color="text.secondary">
-                              {variants
-                                .filter((variant) => variant.product_id === product.id && variant.is_active)
-                                .map((variant) => {
-                                  const adjustment = branchEdit.priceOverride === ''
-                                    ? 0
-                                    : Number(branchEdit.priceOverride) - Number(product.price)
-                                  const sizeSetting = branchOptionSettings[`variant:${variant.id}`]
-                                  const effectivePrice = sizeSetting?.priceOverride ??
-                                    Math.max(0, Number(variant.price) + adjustment)
-                                  return `${variant.name}: ${formatPrice(effectivePrice)}${sizeSetting?.isAvailable === false ? ' (off)' : ''}`
-                                })
-                                .join(' · ')}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <FormControlLabel
-                            sx={{ m: 0 }}
-                            control={
-                              <Switch
-                                checked={Boolean(branchEdit.isAvailable)}
+                        <TableCell sx={{ verticalAlign: 'top', pt: 2 }}>{formatPrice(product.price)}</TableCell>
+                        <TableCell sx={{ verticalAlign: 'top', pt: 1.5 }}>
+                          <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                            <Box sx={{ minWidth: 160 }}>
+                              <TextField
+                                size="small"
+                                aria-label={`Branch price for ${product.name}`}
+                                type="number"
+                                value={branchEdit.priceOverride}
+                                placeholder="Use catalog price"
                                 disabled={!branchId || availabilityBranchId !== branchId || !canEditBranchMenu || isSaving}
                                 onChange={(event) => setBranchEdits((state) => ({
                                   ...state,
-                                  [product.id]: { ...branchEdit, isAvailable: event.target.checked },
+                                  [product.id]: { ...branchEdit, priceOverride: event.target.value },
                                 }))}
+                                slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
+                                helperText={variants.some((variant) => variant.product_id === product.id)
+                                  ? branchEdit.priceOverride === ''
+                                    ? 'Sizes follow catalog prices'
+                                    : 'Adjusts all size prices by the same amount'
+                                  : branchEdit.priceOverride === ''
+                                    ? 'Uses catalog price'
+                                    : ''}
                               />
-                            }
-                            label={branchEdit.isAvailable ? 'On' : 'Off'}
-                          />
+                              {variants.some((variant) => variant.product_id === product.id) && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                                  {variants
+                                    .filter((variant) => variant.product_id === product.id && variant.is_active)
+                                    .map((variant) => {
+                                      const adjustment = branchEdit.priceOverride === ''
+                                        ? 0
+                                        : Number(branchEdit.priceOverride) - Number(product.price)
+                                      const sizeSetting = branchOptionSettings[`variant:${variant.id}`]
+                                      const effectivePrice = sizeSetting?.priceOverride ??
+                                        Math.max(0, Number(variant.price) + adjustment)
+                                      return `${variant.name}: ${formatPrice(effectivePrice)}${sizeSetting?.isAvailable === false ? ' (off)' : ''}`
+                                    })
+                                    .join(' · ')}
+                                </Typography>
+                              )}
+                            </Box>
+                            <FormControlLabel
+                              sx={{ m: 0, pt: 0.5, flexShrink: 0 }}
+                              control={
+                                <Switch
+                                  checked={Boolean(branchEdit.isAvailable)}
+                                  disabled={!branchId || availabilityBranchId !== branchId || !canEditBranchMenu || isSaving}
+                                  onChange={(event) => setBranchEdits((state) => ({
+                                    ...state,
+                                    [product.id]: { ...branchEdit, isAvailable: event.target.checked },
+                                  }))}
+                                />
+                              }
+                              label={branchEdit.isAvailable ? 'On' : 'Off'}
+                            />
+                          </Stack>
                         </TableCell>
-                        <TableCell align="right">
-                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'flex-end' }}>
+                        <TableCell align="right" sx={{ verticalAlign: 'top', pt: 1.5 }}>
+                          <Stack direction="column" spacing={1} sx={{ alignItems: 'flex-end' }}>
                             <Button
                               size="small"
                               variant="outlined"
@@ -866,19 +919,26 @@ function AdminMenuPage() {
                   })}
                   {!products.length && (
                     <TableRow>
-                      <TableCell colSpan={5}>
+                      <TableCell colSpan={4}>
                         <Alert severity="info">Add a product in the catalog before managing branch availability.</Alert>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {products.length > 0 && filteredBranchProducts.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4}>
+                        <Alert severity="info">No products match your search.</Alert>
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
             </TableContainer>
-            {products.length > 0 && (
+            {filteredBranchProducts.length > 0 && (
               <PaginationControls
                 page={branchPage}
                 pageSize={branchPageSize}
-                hasNextPage={(branchPage + 1) * branchPageSize < products.length}
+                hasNextPage={(branchPage + 1) * branchPageSize < filteredBranchProducts.length}
                 isLoading={isLoading}
                 onChange={(nextPage, nextPageSize) => {
                   setBranchPage(nextPage)
@@ -1039,6 +1099,18 @@ function AdminMenuPage() {
           <Box>
           {products.length ? (
           <>
+          <TextField
+            size="small"
+            fullWidth
+            placeholder="Search products by name or SKU…"
+            value={productSearch}
+            onChange={(event) => {
+              setProductSearch(event.target.value)
+              setProductPage(0)
+            }}
+            aria-label="Search products"
+            sx={{ mb: 1.5 }}
+          />
           <TableContainer component={Paper} variant="outlined">
             <Table size="small" aria-label="Product list" sx={{ minWidth: 700 }}>
               <TableHead>
@@ -1052,6 +1124,9 @@ function AdminMenuPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
+                {paginatedProducts.length === 0 && filteredProducts.length === 0 && products.length > 0 && (
+                  <TableRow><TableCell colSpan={6}><Alert severity="info">No products match your search.</Alert></TableCell></TableRow>
+                )}
                 {paginatedProducts.map((product) => (
                   <TableRow key={product.id} hover>
                     <TableCell>
@@ -1096,11 +1171,11 @@ function AdminMenuPage() {
               </TableBody>
             </Table>
           </TableContainer>
-          {products.length > 0 && (
+          {filteredProducts.length > 0 && (
             <PaginationControls
               page={productPage}
               pageSize={productPageSize}
-              hasNextPage={(productPage + 1) * productPageSize < products.length}
+              hasNextPage={(productPage + 1) * productPageSize < filteredProducts.length}
               isLoading={isLoading}
               onChange={(nextPage, nextPageSize) => {
                 setProductPage(nextPage)

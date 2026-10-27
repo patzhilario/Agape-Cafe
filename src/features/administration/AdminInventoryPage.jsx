@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Accordion,
@@ -137,6 +137,8 @@ function AdminInventoryPage() {
   const [setupReloadKey, setSetupReloadKey] = useState(0)
   const [ingredientDialogOpen, setIngredientDialogOpen] = useState(false)
   const [movementDialogOpen, setMovementDialogOpen] = useState(false)
+  const [ingredientSearch, setIngredientSearch] = useState('')
+  const [historySearch, setHistorySearch] = useState('')
 
   useEffect(() => {
     let active = true
@@ -209,7 +211,24 @@ function AdminInventoryPage() {
     entry.quantity_on_hand,
   ]))
   const activeIngredients = asArray(ingredients).filter((ingredient) => ingredient.is_active)
-  const paginatedIngredients = activeIngredients.slice(
+  const filteredIngredients = useMemo(() => {
+    const q = ingredientSearch.trim().toLowerCase()
+    if (!q) return activeIngredients
+    return activeIngredients.filter((i) => i.name.toLowerCase().includes(q))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ingredients, ingredientSearch])
+  const filteredMovements = useMemo(() => {
+    const q = historySearch.trim().toLowerCase()
+    if (!q) return movements
+    return movements.filter((m) => {
+      const ingredient = asArray(ingredients).find((i) => i.id === m.ingredient_id)
+      return (
+        (ingredient?.name || '').toLowerCase().includes(q) ||
+        m.movement_type.replaceAll('_', ' ').toLowerCase().includes(q)
+      )
+    })
+  }, [movements, ingredients, historySearch])
+  const paginatedIngredients = filteredIngredients.slice(
     inventoryPage * inventoryPageSize,
     (inventoryPage + 1) * inventoryPageSize,
   )
@@ -456,6 +475,8 @@ function AdminInventoryPage() {
           onChange={(_, value) => {
             setInventoryView(value)
             setInventoryPage(0)
+            setIngredientSearch('')
+            setHistorySearch('')
           }}
           variant="scrollable"
           allowScrollButtonsMobile
@@ -487,8 +508,20 @@ function AdminInventoryPage() {
               <Typography variant="body2" color="text.secondary">
                 Add a stock quantity when you receive supplies; record closing usage to subtract what was used. The alert level only warns you; it does not change stock.
               </Typography>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search items…"
+                value={ingredientSearch}
+                onChange={(event) => {
+                  setIngredientSearch(event.target.value)
+                  setInventoryPage(0)
+                }}
+                aria-label="Search inventory items"
+                sx={{ mt: 1.5 }}
+              />
             </Box>
-            {ingredients.filter((ingredient) => ingredient.is_active).length ? (
+            {activeIngredients.length ? (
               <TableContainer>
                 <Table size="small" aria-label="Detailed inventory and stock movement summary" sx={{ minWidth: 1280 }}>
                   <TableHead
@@ -585,14 +618,14 @@ function AdminInventoryPage() {
                   </TableBody>
                 </Table>
               </TableContainer>
-            ) : <Typography color="text.secondary">No inventory items have been configured.</Typography>}
+            ) : <Typography color="text.secondary" sx={{ px: 3, pb: 2 }}>{activeIngredients.length === 0 ? 'No inventory items have been configured.' : 'No items match your search.'}</Typography>}
           </Stack>
         </Paper>
-        {activeIngredients.length > 0 && (
+        {filteredIngredients.length > 0 && (
           <PaginationControls
             page={inventoryPage}
             pageSize={inventoryPageSize}
-            hasNextPage={(inventoryPage + 1) * inventoryPageSize < activeIngredients.length}
+            hasNextPage={(inventoryPage + 1) * inventoryPageSize < filteredIngredients.length}
             isLoading={stockBranchId !== branchId}
             onChange={(nextPage, nextPageSize) => {
               setInventoryPage(nextPage)
@@ -665,8 +698,20 @@ function AdminInventoryPage() {
                 <Typography variant="body2" color="text.secondary">
                   Set a warning quantity for each item at this branch. The alert only warns you; it does not change stock.
                 </Typography>
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="Search items…"
+                  value={ingredientSearch}
+                  onChange={(event) => {
+                    setIngredientSearch(event.target.value)
+                    setInventoryPage(0)
+                  }}
+                  aria-label="Search inventory items"
+                  sx={{ mt: 1.5 }}
+                />
               </Box>
-              {activeIngredients.length ? (
+              {filteredIngredients.length ? (
                 <>
                   <TableContainer>
                     <Table size="small" aria-label="Branch inventory alert settings" sx={{ minWidth: 680 }}>
@@ -726,7 +771,7 @@ function AdminInventoryPage() {
                     <PaginationControls
                       page={inventoryPage}
                       pageSize={inventoryPageSize}
-                      hasNextPage={(inventoryPage + 1) * inventoryPageSize < activeIngredients.length}
+                      hasNextPage={(inventoryPage + 1) * inventoryPageSize < filteredIngredients.length}
                       isLoading={stockBranchId !== branchId}
                       onChange={(nextPage, nextPageSize) => {
                         setInventoryPage(nextPage)
@@ -737,7 +782,7 @@ function AdminInventoryPage() {
                 </>
               ) : (
                 <Typography color="text.secondary" sx={{ px: 3, pb: 2 }}>
-                  No active inventory items have been configured.
+                  {activeIngredients.length === 0 ? 'No active inventory items have been configured.' : 'No items match your search.'}
                 </Typography>
               )}
               {!canEditInventory && (
@@ -944,43 +989,57 @@ function AdminInventoryPage() {
             </Box>
           </AccordionSummary>
           <AccordionDetails>
-            {movements.length ? (
-              <TableContainer>
-                <Table size="small" aria-label="Recent inventory stock history">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Date</TableCell>
-                      <TableCell>Item</TableCell>
-                      <TableCell>Movement</TableCell>
-                      <TableCell align="right">Quantity</TableCell>
-                      <TableCell align="right">Unit cost</TableCell>
-                      <TableCell align="right">Total cost</TableCell>
-                      <TableCell>Note</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {movements.map((movement) => {
-                      const ingredient = ingredients.find((entry) => entry.id === movement.ingredient_id)
-                      return (
-                        <TableRow key={movement.id}>
-                          <TableCell>{new Date(movement.created_at).toLocaleString()}</TableCell>
-                          <TableCell>{ingredient?.name || 'Inventory item'}</TableCell>
-                          <TableCell>{movement.movement_type.replaceAll('_', ' ')}</TableCell>
-                          <TableCell align="right">{movement.quantity_delta} {ingredient?.unit || ''}</TableCell>
-                          <TableCell align="right">{movement.unit_cost == null ? '—' : formatPrice(movement.unit_cost)}</TableCell>
-                          <TableCell align="right">
-                            {movement.unit_cost == null
-                              ? '—'
-                              : formatPrice(Math.abs(Number(movement.quantity_delta)) * Number(movement.unit_cost))}
-                          </TableCell>
-                          <TableCell>{movement.note || '—'}</TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            ) : <Typography color="text.secondary">No inventory movements recorded for this branch.</Typography>}
+            <Stack spacing={1.5}>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search by item name or movement type…"
+                value={historySearch}
+                onChange={(event) => setHistorySearch(event.target.value)}
+                aria-label="Search movement history"
+              />
+              {filteredMovements.length ? (
+                <TableContainer>
+                  <Table size="small" aria-label="Recent inventory stock history">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Item</TableCell>
+                        <TableCell>Movement</TableCell>
+                        <TableCell align="right">Quantity</TableCell>
+                        <TableCell align="right">Unit cost</TableCell>
+                        <TableCell align="right">Total cost</TableCell>
+                        <TableCell>Note</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {filteredMovements.map((movement) => {
+                        const ingredient = ingredients.find((entry) => entry.id === movement.ingredient_id)
+                        return (
+                          <TableRow key={movement.id}>
+                            <TableCell>{new Date(movement.created_at).toLocaleString()}</TableCell>
+                            <TableCell>{ingredient?.name || 'Inventory item'}</TableCell>
+                            <TableCell>{movement.movement_type.replaceAll('_', ' ')}</TableCell>
+                            <TableCell align="right">{movement.quantity_delta} {ingredient?.unit || ''}</TableCell>
+                            <TableCell align="right">{movement.unit_cost == null ? '—' : formatPrice(movement.unit_cost)}</TableCell>
+                            <TableCell align="right">
+                              {movement.unit_cost == null
+                                ? '—'
+                                : formatPrice(Math.abs(Number(movement.quantity_delta)) * Number(movement.unit_cost))}
+                            </TableCell>
+                            <TableCell>{movement.note || '—'}</TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Typography color="text.secondary">
+                  {movements.length === 0 ? 'No inventory movements recorded for this branch.' : 'No movements match your search.'}
+                </Typography>
+              )}
+            </Stack>
           </AccordionDetails>
         </Accordion>}
       </Stack>
