@@ -122,7 +122,17 @@ export default function AdminBranchesPage() {
   }
 
   function openEditBranch(branch) {
-    setDraft({ ...branch })
+    setDraft({
+      ...emptyBranch,
+      ...branch,
+      name: branch.name || '',
+      address: branch.address || '',
+      map_url: branch.map_url || '',
+      phone: branch.phone || '',
+      email: branch.email || '',
+      is_active: Boolean(branch.is_active),
+      delivery_enabled: Boolean(branch.delivery_enabled),
+    })
     setBranchDiningTables([])
     setBranchDiningTableOrders([])
     setDiningTableDraft({ id: '', label: '' })
@@ -180,7 +190,7 @@ export default function AdminBranchesPage() {
     event.preventDefault()
     setErrorMessage('')
     setSuccessMessage('')
-    const mapUrl = draft.map_url.trim()
+    const mapUrl = (draft.map_url || '').trim()
     if (mapUrl) {
       try {
         const parsedMapUrl = new URL(mapUrl)
@@ -199,13 +209,13 @@ export default function AdminBranchesPage() {
     }
     setIsSaving(true)
     const payload = {
-      name: draft.name.trim(),
-      address: draft.address.trim(),
+      name: (draft.name || '').trim(),
+      address: (draft.address || '').trim(),
       map_url: mapUrl || null,
-      phone: draft.phone.trim() || null,
-      email: draft.email.trim() || null,
-      is_active: draft.is_active,
-      delivery_enabled: draft.delivery_enabled,
+      phone: (draft.phone || '').trim() || null,
+      email: (draft.email || '').trim() || null,
+      is_active: Boolean(draft.is_active),
+      delivery_enabled: Boolean(draft.delivery_enabled),
     }
     try {
       const supabase = getSupabaseClient()

@@ -77,15 +77,13 @@ export default function AboutPage() {
               </Typography>
               <Typography
                 sx={{
-                  maxWidth: 510,
-                  color: 'rgba(255,250,243,.76)',
-                  fontSize: { xs: '1rem', md: '1.125rem' },
-                  lineHeight: 1.85,
+                  maxWidth: 560,
+                  color: 'rgba(255,250,243,.85)',
+                  fontSize: { xs: '1.05rem', md: '1.2rem' },
+                  lineHeight: 1.75,
                 }}
               >
-                Agapé is an ancient Greek word for generous, selfless love.
-                It is the thought behind the café: to make people feel welcome,
-                and to bring a little care to an everyday cup.
+                agape is selfless, sacrificial unconditional love of God, the highest of the four types of love.
               </Typography>
               <Box sx={{ pt: 1 }}>
                 <Divider sx={{ borderColor: 'rgba(255,250,243,.25)', maxWidth: 92 }} />
@@ -121,9 +119,9 @@ export default function AboutPage() {
                 </Typography>
                 <Typography
                   variant="overline"
-                  sx={{ mt: 1.5, letterSpacing: '.2em', color: 'rgba(255,250,243,.58)' }}
+                  sx={{ mt: 1.5, letterSpacing: '.18em', color: 'rgba(255,250,243,.68)', fontSize: '0.875rem' }}
                 >
-                  AGÁPĒ · NOUN
+                  [noun] [Greek]
                 </Typography>
               </Stack>
             </Box>

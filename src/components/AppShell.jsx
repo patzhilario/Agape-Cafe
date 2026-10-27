@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, AppBar, Badge, Box, Button, Container, Drawer, IconButton, Snackbar, Stack, Toolbar, Typography, useMediaQuery, useTheme } from '@mui/material'
+import { Alert, AppBar, Badge, Box, Button, Container, Divider, Drawer, Grid, IconButton, Snackbar, Stack, Toolbar, Typography, useMediaQuery, useTheme } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import MenuIcon from '@mui/icons-material/Menu'
 import ShoppingCartOutlinedIcon from '@mui/icons-material/ShoppingCartOutlined'
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined'
+import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined'
+import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined'
+import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined'
+import FacebookIcon from '@mui/icons-material/Facebook'
+import InstagramIcon from '@mui/icons-material/Instagram'
 import { Link as RouterLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth.js'
 import { useCart } from '../features/orders/useCart.js'
@@ -281,35 +287,384 @@ export default function AppShell({ children }) {
       <Box
         component="footer"
         sx={{
-          py: { xs: 2.5, sm: 3 },
           mt: 'auto',
-          bgcolor: '#30231c',
+          bgcolor: '#211813',
           color: '#fffaf4',
+          borderTop: '1px solid rgba(255, 250, 244, 0.08)',
+          pt: { xs: 4, sm: 5, md: 6 },
+          pb: { xs: 3, sm: 3.5, md: 4 },
         }}
       >
-        <Container maxWidth="lg">
+        <Container maxWidth="lg" sx={{ px: { xs: 2.5, sm: 3, md: 4 } }}>
+          <Grid container spacing={{ xs: 3.5, sm: 4, md: 4 }}>
+            {/* Column 1: Brand & Bio */}
+            <Grid item xs={12} md={4.5}>
+              <Stack spacing={2}>
+                <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+                  <Box
+                    component="img"
+                    src={logo}
+                    alt="Agapé Café Logo"
+                    sx={{
+                      width: 44,
+                      height: 44,
+                      objectFit: 'cover',
+                      borderRadius: '50%',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                      border: '2px solid rgba(255,250,244,0.15)',
+                    }}
+                  />
+                  <Box>
+                    <Typography variant="h6" fontWeight={800} sx={{ letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+                      Agapé Café
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#d8b18a', fontWeight: 500, display: 'block' }}>
+                      A little love in every cup
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'rgba(255,250,244,0.76)',
+                    lineHeight: 1.65,
+                    maxWidth: { xs: '100%', md: 360 },
+                    fontStyle: 'italic',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  agápe [noun] [Greek] — selfless, sacrificial unconditional love of God, the highest of the four types of love.
+                </Typography>
+                <Stack direction="row" spacing={1.25} sx={{ pt: 0.5 }}>
+                  <IconButton
+                    component="a"
+                    href="https://facebook.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Agapé Café on Facebook"
+                    size="small"
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      color: 'rgba(255,250,244,0.85)',
+                      bgcolor: 'rgba(255,250,244,0.06)',
+                      border: '1px solid rgba(255,250,244,0.12)',
+                      '&:hover': { bgcolor: 'rgba(216, 177, 138, 0.2)', color: '#d8b18a', borderColor: '#d8b18a' },
+                    }}
+                  >
+                    <FacebookIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                  <IconButton
+                    component="a"
+                    href="https://instagram.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Agapé Café on Instagram"
+                    size="small"
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      color: 'rgba(255,250,244,0.85)',
+                      bgcolor: 'rgba(255,250,244,0.06)',
+                      border: '1px solid rgba(255,250,244,0.12)',
+                      '&:hover': { bgcolor: 'rgba(216, 177, 138, 0.2)', color: '#d8b18a', borderColor: '#d8b18a' },
+                    }}
+                  >
+                    <InstagramIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Stack>
+              </Stack>
+            </Grid>
+
+            {/* Column 2: Quick Links */}
+            <Grid item xs={6} sm={4} md={2.5}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: '#d8b18a',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  display: 'block',
+                  mb: 2,
+                }}
+              >
+                Quick Links
+              </Typography>
+              <Stack spacing={1}>
+                <Button
+                  component={RouterLink}
+                  to="/"
+                  color="inherit"
+                  sx={{
+                    justifyContent: 'flex-start',
+                    p: 0,
+                    minHeight: 'auto',
+                    color: 'rgba(255,250,244,0.78)',
+                    fontSize: '0.875rem',
+                    fontWeight: 400,
+                    textTransform: 'none',
+                    '&:hover': { color: '#d8b18a', bgcolor: 'transparent', pl: 0.5 },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Home
+                </Button>
+                <Button
+                  component={RouterLink}
+                  to="/menu"
+                  color="inherit"
+                  sx={{
+                    justifyContent: 'flex-start',
+                    p: 0,
+                    minHeight: 'auto',
+                    color: 'rgba(255,250,244,0.78)',
+                    fontSize: '0.875rem',
+                    fontWeight: 400,
+                    textTransform: 'none',
+                    '&:hover': { color: '#d8b18a', bgcolor: 'transparent', pl: 0.5 },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Our Menu & Orders
+                </Button>
+                <Button
+                  component={RouterLink}
+                  to="/branches"
+                  color="inherit"
+                  sx={{
+                    justifyContent: 'flex-start',
+                    p: 0,
+                    minHeight: 'auto',
+                    color: 'rgba(255,250,244,0.78)',
+                    fontSize: '0.875rem',
+                    fontWeight: 400,
+                    textTransform: 'none',
+                    '&:hover': { color: '#d8b18a', bgcolor: 'transparent', pl: 0.5 },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Branches & Locations
+                </Button>
+                <Button
+                  component={RouterLink}
+                  to="/about"
+                  color="inherit"
+                  sx={{
+                    justifyContent: 'flex-start',
+                    p: 0,
+                    minHeight: 'auto',
+                    color: 'rgba(255,250,244,0.78)',
+                    fontSize: '0.875rem',
+                    fontWeight: 400,
+                    textTransform: 'none',
+                    '&:hover': { color: '#d8b18a', bgcolor: 'transparent', pl: 0.5 },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  About Our Story
+                </Button>
+                {account ? (
+                  <Button
+                    component={RouterLink}
+                    to={account.homePath}
+                    color="inherit"
+                    sx={{
+                      justifyContent: 'flex-start',
+                      p: 0,
+                      minHeight: 'auto',
+                      color: 'rgba(255,250,244,0.78)',
+                      fontSize: '0.875rem',
+                      fontWeight: 400,
+                      textTransform: 'none',
+                      '&:hover': { color: '#d8b18a', bgcolor: 'transparent', pl: 0.5 },
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    {account.roles.some((role) => ['super_admin', 'branch_admin', 'staff'].includes(role))
+                      ? 'Admin Workspace'
+                      : 'My Account'}
+                  </Button>
+                ) : (
+                  <Button
+                    component={RouterLink}
+                    to="/auth/sign-in"
+                    color="inherit"
+                    sx={{
+                      justifyContent: 'flex-start',
+                      p: 0,
+                      minHeight: 'auto',
+                      color: 'rgba(255,250,244,0.78)',
+                      fontSize: '0.875rem',
+                      fontWeight: 400,
+                      textTransform: 'none',
+                      '&:hover': { color: '#d8b18a', bgcolor: 'transparent', pl: 0.5 },
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    Sign In / Register
+                  </Button>
+                )}
+              </Stack>
+            </Grid>
+
+            {/* Column 3: Hours & Service */}
+            <Grid item xs={6} sm={4} md={2.5}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: '#d8b18a',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  display: 'block',
+                  mb: 2,
+                }}
+              >
+                Store Hours
+              </Typography>
+              <Stack spacing={1.5}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                  <AccessTimeOutlinedIcon sx={{ fontSize: 17, color: '#d8b18a', mt: 0.3 }} />
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#fffaf4', fontSize: '0.875rem' }}>
+                      Mon – Sat
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'rgba(255,250,244,0.72)', display: 'block' }}>
+                      8:00 AM – 10:00 PM
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                  <AccessTimeOutlinedIcon sx={{ fontSize: 17, color: '#d8b18a', mt: 0.3 }} />
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#fffaf4', fontSize: '0.875rem' }}>
+                      Sunday
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'rgba(255,250,244,0.72)', display: 'block' }}>
+                      9:00 AM – 9:00 PM
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Typography variant="caption" sx={{ color: 'rgba(255,250,244,0.52)', pt: 0.5, fontStyle: 'italic', display: 'block' }}>
+                  Dine-in, pickup & delivery
+                </Typography>
+              </Stack>
+            </Grid>
+
+            {/* Column 4: Contact & Location */}
+            <Grid item xs={12} sm={4} md={2.5}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: '#d8b18a',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  display: 'block',
+                  mb: 2,
+                }}
+              >
+                Contact
+              </Typography>
+              <Stack spacing={1.5}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                  <LocationOnOutlinedIcon sx={{ fontSize: 17, color: '#d8b18a', mt: 0.3, flexShrink: 0 }} />
+                  <Typography variant="body2" sx={{ color: 'rgba(255,250,244,0.75)', lineHeight: 1.5, fontSize: '0.875rem' }}>
+                    Multiple branches across Metro Manila
+                  </Typography>
+                </Stack>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <PhoneOutlinedIcon sx={{ fontSize: 17, color: '#d8b18a', flexShrink: 0 }} />
+                  <Typography
+                    component="a"
+                    href="tel:+639123456789"
+                    variant="body2"
+                    sx={{
+                      color: 'rgba(255,250,244,0.75)',
+                      textDecoration: 'none',
+                      fontSize: '0.875rem',
+                      '&:hover': { color: '#d8b18a' },
+                    }}
+                  >
+                    +63 (912) 345-6789
+                  </Typography>
+                </Stack>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <EmailOutlinedIcon sx={{ fontSize: 17, color: '#d8b18a', flexShrink: 0 }} />
+                  <Typography
+                    component="a"
+                    href="mailto:hello@agapecafe.ph"
+                    variant="body2"
+                    sx={{
+                      color: 'rgba(255,250,244,0.75)',
+                      textDecoration: 'none',
+                      fontSize: '0.875rem',
+                      '&:hover': { color: '#d8b18a' },
+                    }}
+                  >
+                    hello@agapecafe.ph
+                  </Typography>
+                </Stack>
+              </Stack>
+            </Grid>
+          </Grid>
+
+          <Divider sx={{ my: { xs: 3, md: 3.5 }, borderColor: 'rgba(255,250,244,0.08)' }} />
+
           <Stack
             direction={{ xs: 'column', sm: 'row' }}
             spacing={1.5}
-            sx={{ alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between' }}
+            sx={{
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              textAlign: { xs: 'center', sm: 'left' },
+            }}
           >
-            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-              <Box
-                component="img"
-                src={logo}
-                alt=""
-                sx={{ width: 38, height: 38, objectFit: 'cover', borderRadius: '50%' }}
-              />
-              <Box>
-                <Typography fontWeight={700}>Agapé Café</Typography>
-                <Typography variant="body2" sx={{ color: 'rgba(255,250,244,.76)' }}>
-                  A little love in every cup.
-                </Typography>
-              </Box>
-            </Stack>
-            <Typography variant="caption" sx={{ color: 'rgba(255,250,244,.68)' }}>
-              © {currentYear} Agapé Café. Made with love.
+            <Typography variant="caption" sx={{ color: 'rgba(255,250,244,0.55)', fontSize: '0.8125rem' }}>
+              © {currentYear} Agapé Café. All rights reserved.
             </Typography>
+            <Stack direction="row" spacing={2.5}>
+              <Typography
+                component={RouterLink}
+                to="/about"
+                variant="caption"
+                sx={{
+                  color: 'rgba(255,250,244,0.6)',
+                  textDecoration: 'none',
+                  fontSize: '0.8125rem',
+                  '&:hover': { color: '#d8b18a' },
+                }}
+              >
+                About Us
+              </Typography>
+              <Typography
+                component={RouterLink}
+                to="/branches"
+                variant="caption"
+                sx={{
+                  color: 'rgba(255,250,244,0.6)',
+                  textDecoration: 'none',
+                  fontSize: '0.8125rem',
+                  '&:hover': { color: '#d8b18a' },
+                }}
+              >
+                Branches
+              </Typography>
+              <Typography
+                component={RouterLink}
+                to="/menu"
+                variant="caption"
+                sx={{
+                  color: 'rgba(255,250,244,0.6)',
+                  textDecoration: 'none',
+                  fontSize: '0.8125rem',
+                  '&:hover': { color: '#d8b18a' },
+                }}
+              >
+                Menu
+              </Typography>
+            </Stack>
           </Stack>
         </Container>
       </Box>
