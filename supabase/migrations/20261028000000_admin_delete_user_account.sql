@@ -1,3 +1,38 @@
+alter table public.orders
+  alter column customer_id drop not null;
+alter table public.orders
+  drop constraint orders_customer_id_fkey,
+  add constraint orders_customer_id_fkey
+    foreign key (customer_id) references public.profiles(id) on delete set null;
+
+alter table public.promotion_redemptions
+  alter column customer_id drop not null;
+alter table public.promotion_redemptions
+  drop constraint promotion_redemptions_customer_id_fkey,
+  add constraint promotion_redemptions_customer_id_fkey
+    foreign key (customer_id) references public.profiles(id) on delete set null;
+
+alter table public.order_payment_proofs
+  alter column customer_id drop not null;
+alter table public.order_payment_proofs
+  drop constraint order_payment_proofs_customer_id_fkey,
+  add constraint order_payment_proofs_customer_id_fkey
+    foreign key (customer_id) references public.profiles(id) on delete set null;
+
+alter table public.benefit_discount_requests
+  alter column customer_id drop not null;
+alter table public.benefit_discount_requests
+  drop constraint benefit_discount_requests_customer_id_fkey,
+  add constraint benefit_discount_requests_customer_id_fkey
+    foreign key (customer_id) references public.profiles(id) on delete set null;
+
+alter table public.payment_refunds
+  alter column created_by drop not null;
+alter table public.payment_refunds
+  drop constraint payment_refunds_created_by_fkey,
+  add constraint payment_refunds_created_by_fkey
+    foreign key (created_by) references public.profiles(id) on delete set null;
+
 create or replace function public.admin_delete_user_account(target_user_id uuid)
 returns void
 language plpgsql
@@ -47,13 +82,8 @@ begin
   delete from public.pending_user_access
   where email = lower(target_email);
 
-  begin
-    delete from auth.users
-    where id = target_user_id;
-  exception when foreign_key_violation then
-    raise exception 'This account has order or financial history and cannot be permanently deleted.'
-      using errcode = '23503';
-  end;
+  delete from auth.users
+  where id = target_user_id;
 
   insert into public.audit_logs (actor_id, action, record_type, record_id, details)
   values (

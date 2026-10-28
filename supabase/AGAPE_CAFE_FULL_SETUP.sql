@@ -852,7 +852,7 @@ create table public.payment_methods (
 create table public.orders (
   id uuid primary key default gen_random_uuid(),
   order_number text not null unique,
-  customer_id uuid not null references public.profiles (id) on delete restrict,
+  customer_id uuid references public.profiles (id) on delete set null,
   branch_id uuid not null references public.branches (id) on delete restrict,
   client_request_id uuid not null,
   request_fingerprint text not null,
@@ -933,7 +933,7 @@ create table public.promotion_products (
 create table public.promotion_redemptions (
   id uuid primary key default gen_random_uuid(),
   promotion_id uuid not null references public.promotions (id) on delete restrict,
-  customer_id uuid not null references public.profiles (id) on delete restrict,
+  customer_id uuid references public.profiles (id) on delete set null,
   order_id uuid not null unique references public.orders (id) on delete restrict,
   discount_amount numeric(12, 2) not null check (discount_amount > 0),
   created_at timestamptz not null default now()
@@ -2415,7 +2415,7 @@ on conflict (id) do nothing;
 create table public.benefit_discount_requests (
   id uuid primary key,
   order_id uuid not null unique references public.orders (id) on delete restrict,
-  customer_id uuid not null references public.profiles (id) on delete restrict,
+  customer_id uuid references public.profiles (id) on delete set null,
   branch_id uuid not null references public.branches (id) on delete restrict,
   benefit_type public.benefit_type not null,
   status public.benefit_request_status not null default 'pending',
@@ -3550,7 +3550,7 @@ $$;
 create table public.order_payment_proofs (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null unique references public.orders (id) on delete restrict,
-  customer_id uuid not null references public.profiles (id) on delete restrict,
+  customer_id uuid references public.profiles (id) on delete set null,
   branch_id uuid not null references public.branches (id) on delete restrict,
   document_path text not null check (length(document_path) between 1 and 512),
   status text not null default 'pending'
@@ -6703,7 +6703,7 @@ create table public.payment_refunds (
   payment_id uuid not null references public.payments(id) on delete restrict,
   amount numeric(12, 2) not null check (amount > 0),
   note text not null check (length(btrim(note)) between 3 and 500),
-  created_by uuid not null references public.profiles(id) on delete restrict,
+  created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -8195,9 +8195,8 @@ begin
     delete from auth.users
     where id = target_user_id;
   exception when foreign_key_violation then
-    raise exception 'This account has order or financial history and cannot be permanently deleted.'
-      using errcode = '23503';
-  end;
+  delete from auth.users
+  where id = target_user_id;
 
   insert into public.audit_logs (actor_id, action, record_type, record_id, details)
   values (

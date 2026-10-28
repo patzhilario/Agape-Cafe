@@ -817,7 +817,8 @@ export default function AccessManagementPage() {
               <DialogContent>
                 <Typography>
                   Permanently delete {accountToDelete?.email || 'this account'}? This cannot be undone.
-                  Accounts linked to order or financial history cannot be deleted.
+                  Existing orders and financial records will remain, but will no longer be linked to
+                  this account.
                 </Typography>
               </DialogContent>
               <DialogActions sx={{ px: 3, py: 2 }}>

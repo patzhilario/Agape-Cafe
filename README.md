@@ -258,7 +258,8 @@ from branch inventory when an order is completed. Apply it after migration 31
 on existing projects; order screens require this column to load.
 
 Migration 33 adds Super Admin account deletion. Accounts linked to retained
-order or financial records cannot be permanently deleted. Apply it after
+order or financial records can still be permanently deleted; their profile
+links are cleared while the business history is retained. Apply it after
 migration 32 on existing projects.
 
 The foundation migration also creates customer profiles and roles for any
