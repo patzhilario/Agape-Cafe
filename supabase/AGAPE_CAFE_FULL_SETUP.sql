@@ -891,6 +891,7 @@ create table public.order_items (
   discount_amount numeric(12, 2) not null default 0
     check (discount_amount >= 0 and discount_amount <= line_subtotal),
   line_total numeric(12, 2) not null check (line_total >= 0),
+  serving_type text check (serving_type in ('cup', 'glass')),
   promotion_eligible boolean not null default false,
   created_at timestamptz not null default now(),
   check (line_total = line_subtotal - discount_amount)
@@ -8059,5 +8060,159 @@ drop trigger if exists benefit_discount_requests_onsite_only
 create trigger benefit_discount_requests_onsite_only
 before insert or update of order_id on public.benefit_discount_requests
 for each row execute function public.guard_onsite_benefit_discount_order();
+
+insert into public.ingredients (name, unit, is_active)
+values ('Cups (Takeout/Disposable)', 'pcs', true)
+on conflict (name) do update
+set is_active = true, unit = 'pcs';
+
+comment on column public.order_items.serving_type is
+  'Specifies the beverage container chosen: "cup" (disposable cup) or "glass" (dine-in glassware).';
+
+create or replace function public.deduct_cup_inventory_on_order_completed()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  cup_ingredient_id uuid;
+  total_cups_used integer;
+begin
+  if new.status = 'completed' and old.status is distinct from new.status then
+    select coalesce(sum(oi.quantity), 0) into total_cups_used
+    from public.order_items oi
+    left join public.products p on p.id = oi.product_id
+    left join public.categories c on c.id = p.category_id
+    where oi.order_id = new.id
+      and (
+        oi.serving_type = 'cup'
+        or (
+          oi.serving_type is null
+          and c.type = 'drink'
+          and new.fulfillment_method in ('takeout', 'pickup', 'delivery')
+        )
+      );
+
+    if total_cups_used > 0 then
+      select id into cup_ingredient_id
+      from public.ingredients
+      where name = 'Cups (Takeout/Disposable)'
+      limit 1;
+
+      if cup_ingredient_id is not null then
+        insert into public.branch_inventory (branch_id, ingredient_id, quantity_on_hand)
+        values (new.branch_id, cup_ingredient_id, 0)
+        on conflict (branch_id, ingredient_id) do nothing;
+
+        update public.branch_inventory
+        set quantity_on_hand = greatest(0, quantity_on_hand - total_cups_used)
+        where branch_id = new.branch_id
+          and ingredient_id = cup_ingredient_id;
+
+        insert into public.inventory_movements (
+          branch_id,
+          ingredient_id,
+          order_id,
+          movement_type,
+          quantity_delta,
+          note,
+          actor_id
+        )
+        values (
+          new.branch_id,
+          cup_ingredient_id,
+          new.id,
+          'order_consumption',
+          -total_cups_used,
+          'Consumed ' || total_cups_used || ' cup(s) for order ' || new.order_number,
+          (select auth.uid())
+        );
+      end if;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists orders_deduct_cup_inventory on public.orders;
+create trigger orders_deduct_cup_inventory
+  after update of status on public.orders
+  for each row
+  execute function public.deduct_cup_inventory_on_order_completed();
+
+create or replace function public.admin_delete_user_account(target_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  target_email text;
+  super_admin_count bigint;
+begin
+  if not public.has_role('super_admin') then
+    raise exception 'Super Admin permission is required.' using errcode = '42501';
+  end if;
+
+  if target_user_id = (select auth.uid()) then
+    raise exception 'You cannot delete your own account.' using errcode = '42501';
+  end if;
+
+  select email into target_email
+  from public.profiles
+  where id = target_user_id;
+
+  if not found then
+    raise exception 'The selected account does not exist.';
+  end if;
+
+  if exists (
+    select 1
+    from public.user_roles
+    where user_id = target_user_id and role = 'super_admin'
+  ) then
+    perform 1
+    from public.user_roles
+    where role = 'super_admin'
+    order by user_id
+    for update;
+
+    select count(*) into super_admin_count
+    from public.user_roles
+    where role = 'super_admin';
+
+    if super_admin_count <= 1 then
+      raise exception 'The last Super Admin cannot be deleted.';
+    end if;
+  end if;
+
+  delete from public.pending_user_access
+  where email = lower(target_email);
+
+  begin
+    delete from auth.users
+    where id = target_user_id;
+  exception when foreign_key_violation then
+    raise exception 'This account has order or financial history and cannot be permanently deleted.'
+      using errcode = '23503';
+  end;
+
+  insert into public.audit_logs (actor_id, action, record_type, record_id, details)
+  values (
+    (select auth.uid()),
+    'account_deleted',
+    'profile',
+    target_user_id,
+    jsonb_build_object('email', target_email)
+  );
+end;
+$$;
+
+revoke all on function public.admin_delete_user_account(uuid)
+  from public, anon, authenticated;
+grant execute on function public.admin_delete_user_account(uuid)
+  to authenticated;
 
 notify pgrst, 'reload schema';

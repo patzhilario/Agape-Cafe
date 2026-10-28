@@ -65,8 +65,10 @@ export default function AccessManagementPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isInviting, setIsInviting] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
   const [accessDialogOpen, setAccessDialogOpen] = useState(false)
+  const [accountToDelete, setAccountToDelete] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [accountPage, setAccountPage] = useState(0)
@@ -315,6 +317,45 @@ export default function AccessManagementPage() {
     }
   }
 
+  async function deleteAccount() {
+    if (!accountToDelete || accountToDelete.id === account.id) return
+
+    setIsDeleting(true)
+    setIsLoading(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      const { error } = await getSupabaseClient().rpc('admin_delete_user_account', {
+        target_user_id: accountToDelete.id,
+      })
+      if (error) throw error
+
+      const deletedEmail = accountToDelete.email
+      if (selectedUserId === accountToDelete.id) {
+        selectedUserIdRef.current = ''
+        setSelectedUserId('')
+      }
+      setAccountToDelete(null)
+      const refreshed = await loadAccessData()
+      setSuccessMessage(
+        refreshed
+          ? `Account ${deletedEmail || ''} deleted.`
+          : `Account ${deletedEmail || ''} was deleted, but the account list could not refresh. Reload this page to confirm.`,
+      )
+    } catch (error) {
+      console.error('Unable to delete account.', error)
+      setIsLoading(false)
+      setAccountToDelete(null)
+      setErrorMessage(
+        error.message ||
+          'The account could not be deleted. Confirm that you are a Super Admin and that the account has no retained business records.',
+      )
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <Stack sx={{ alignItems: 'center', py: 10 }} spacing={2}>
@@ -543,7 +584,7 @@ export default function AccessManagementPage() {
             {filteredUsers.length ? (
               <>
                 <TableContainer component={Paper} variant="outlined">
-                  <Table size="small" aria-label="Accounts and access" sx={{ minWidth: 750 }}>
+                  <Table size="small" aria-label="Accounts and access" sx={{ minWidth: 850 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell>Name</TableCell>
@@ -569,26 +610,40 @@ export default function AccessManagementPage() {
                             <TableCell>{branchNames.join(', ') || 'All / none'}</TableCell>
                             <TableCell>{user.is_active ? 'Active' : 'Deactivated'}</TableCell>
                             <TableCell align="right">
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                disabled={user.id === account.id}
-                                onClick={() => {
-                                  setSelectedUserId(user.id)
-                                  setSelectedRole(role)
-                                  setSelectedBranches(assignments
-                                    .filter((assignment) => assignment.user_id === user.id)
-                                    .map((assignment) => assignment.branch_id))
-                                  setSelectedPermissions([...new Set(userPermissions
-                                    .filter((permission) => permission.user_id === user.id)
-                                    .map((permission) => permission.permission_id))])
-                                  setErrorMessage('')
-                                  setSuccessMessage('')
-                                  setAccessDialogOpen(true)
-                                }}
-                              >
-                                Edit access
-                              </Button>
+                              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  disabled={user.id === account.id}
+                                  onClick={() => {
+                                    setSelectedUserId(user.id)
+                                    setSelectedRole(role)
+                                    setSelectedBranches(assignments
+                                      .filter((assignment) => assignment.user_id === user.id)
+                                      .map((assignment) => assignment.branch_id))
+                                    setSelectedPermissions([...new Set(userPermissions
+                                      .filter((permission) => permission.user_id === user.id)
+                                      .map((permission) => permission.permission_id))])
+                                    setErrorMessage('')
+                                    setSuccessMessage('')
+                                    setAccessDialogOpen(true)
+                                  }}
+                                >
+                                  Edit access
+                                </Button>
+                                <Button
+                                  size="small"
+                                  color="error"
+                                  disabled={user.id === account.id}
+                                  onClick={() => {
+                                    setAccountToDelete(user)
+                                    setErrorMessage('')
+                                    setSuccessMessage('')
+                                  }}
+                                >
+                                  Delete
+                                </Button>
+                              </Stack>
                             </TableCell>
                           </TableRow>
                         )
@@ -750,6 +805,34 @@ export default function AccessManagementPage() {
                     Save account access
                   </Button>
                 )}
+              </DialogActions>
+            </Dialog>
+            <Dialog
+              open={Boolean(accountToDelete)}
+              onClose={() => !isDeleting && setAccountToDelete(null)}
+              fullWidth
+              maxWidth="xs"
+            >
+              <DialogTitle>Delete account?</DialogTitle>
+              <DialogContent>
+                <Typography>
+                  Permanently delete {accountToDelete?.email || 'this account'}? This cannot be undone.
+                  Accounts linked to order or financial history cannot be deleted.
+                </Typography>
+              </DialogContent>
+              <DialogActions sx={{ px: 3, py: 2 }}>
+                <Button onClick={() => setAccountToDelete(null)} disabled={isDeleting}>
+                  Cancel
+                </Button>
+                <Button
+                  color="error"
+                  variant="contained"
+                  onClick={deleteAccount}
+                  disabled={isDeleting || !accountToDelete}
+                  startIcon={isDeleting ? <CircularProgress size={18} color="inherit" /> : null}
+                >
+                  {isDeleting ? 'Deleting…' : 'Delete account'}
+                </Button>
               </DialogActions>
             </Dialog>
           </>

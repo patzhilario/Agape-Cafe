@@ -253,6 +253,14 @@ and is excluded from the café order total. Apply it after migration 30 on
 existing projects. This migration is safe to re-run if some objects were
 already created by a previous incomplete attempt.
 
+Migration 32 adds drink serving type to order items and deducts takeout cups
+from branch inventory when an order is completed. Apply it after migration 31
+on existing projects; order screens require this column to load.
+
+Migration 33 adds Super Admin account deletion. Accounts linked to retained
+order or financial records cannot be permanently deleted. Apply it after
+migration 32 on existing projects.
+
 The foundation migration also creates customer profiles and roles for any
 Supabase Auth users that already exist when the schema is installed. If the
 full setup was already installed before that backfill was added, run
