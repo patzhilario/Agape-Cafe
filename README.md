@@ -361,7 +361,9 @@ Import this repository into Vercel and keep the project root at the repository
 root. Vercel detects Vite automatically; the production build command is
 `npm run build` and the output directory is `dist`. The root `vercel.json`
 rewrites app routes to `index.html`, so direct links and browser refreshes work
-for React Router routes.
+for React Router routes. It also requires browsers to revalidate app files, so
+they don't keep using an outdated build after a deployment. If a page still
+fails to render, the app shows a reload option instead of a blank screen.
 
 Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as Vercel environment
 variables for the environments you deploy. In Supabase Auth URL configuration,

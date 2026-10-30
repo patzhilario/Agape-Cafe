@@ -12,8 +12,6 @@ import {
   InputLabel,
   MenuItem,
   Paper,
-  Radio,
-  RadioGroup,
   Select,
   Stack,
   TextField,
@@ -760,63 +758,47 @@ export default function CheckoutPage({ panel = false }) {
                 {selectedBranch.address}
               </Typography>
             )}
-            <FormControl>
+            <Box>
               <Typography variant="subtitle1" fontWeight={700}>
                 2. How would you like your order?
               </Typography>
-              <RadioGroup
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
-                  gap: 0.75,
-                  mt: 1,
-                  '& .MuiFormControlLabel-root': {
-                    m: 0,
-                    minWidth: 0,
-                    border: 1,
-                    borderColor: 'divider',
-                    borderRadius: 2,
-                    px: 1,
-                    py: 0.5,
-                  },
-                }}
-                value={fulfillment}
-                onChange={(event) => {
-                  const nextFulfillment = event.target.value
-                  const nextMethods = nextFulfillment === 'delivery' || nextFulfillment === 'pickup'
-                    ? onlinePaymentMethods
-                    : branchPaymentMethods
-                  setFulfillment(nextFulfillment)
-                  setDiningTableId('')
-                  if (nextFulfillment !== 'dine_in' && nextFulfillment !== 'takeout') {
-                    setRequestBenefit(false)
-                    setBenefitDocument(null)
-                    setBenefitQuantities({})
-                  }
-                  if (!nextMethods.some((method) => method.id === paymentMethodId)) {
-                    setPaymentMethodId(nextMethods[0]?.id || '')
-                  }
-                  setErrorMessage('')
-                }}
-              >
-                <FormControlLabel value="dine_in" control={<Radio />} label="Dine-in" />
-                <FormControlLabel
-                  value="pickup"
-                  control={<Radio />}
-                  disabled={!canPayOnline}
-                  label="Pick-up · Online payment"
-                />
-                <FormControlLabel value="takeout" control={<Radio />} label="Take-out" />
-                <FormControlLabel
-                  value="delivery"
-                  control={<Radio />}
-                  disabled={!selectedBranch?.delivery_enabled || !canPayOnline}
-                  label={`Delivery · ${selectedBranch?.delivery_enabled
-                    ? 'booking fee paid separately'
-                    : 'Unavailable at this branch'}`}
-                />
-              </RadioGroup>
-            </FormControl>
+              <FormControl fullWidth size="small" sx={{ mt: 1 }}>
+                <InputLabel id="checkout-fulfillment-label">Order type</InputLabel>
+                <Select
+                  labelId="checkout-fulfillment-label"
+                  label="Order type"
+                  value={fulfillment}
+                  onChange={(event) => {
+                    const nextFulfillment = event.target.value
+                    const nextMethods = nextFulfillment === 'delivery' || nextFulfillment === 'pickup'
+                      ? onlinePaymentMethods
+                      : branchPaymentMethods
+                    setFulfillment(nextFulfillment)
+                    setDiningTableId('')
+                    if (nextFulfillment !== 'dine_in' && nextFulfillment !== 'takeout') {
+                      setRequestBenefit(false)
+                      setBenefitDocument(null)
+                      setBenefitQuantities({})
+                    }
+                    if (!nextMethods.some((method) => method.id === paymentMethodId)) {
+                      setPaymentMethodId(nextMethods[0]?.id || '')
+                    }
+                    setErrorMessage('')
+                  }}
+                >
+                  <MenuItem value="dine_in">Dine-in</MenuItem>
+                  <MenuItem value="pickup" disabled={!canPayOnline}>
+                    Pick-up · Online payment
+                  </MenuItem>
+                  <MenuItem value="takeout">Take-out</MenuItem>
+                  <MenuItem value="delivery" disabled={!selectedBranch?.delivery_enabled || !canPayOnline}>
+                    Delivery · {selectedBranch?.delivery_enabled
+                      ? 'booking fee paid separately'
+                      : 'Unavailable at this branch'}
+                  </MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
             {selectedBranch?.delivery_enabled && !canPayOnline && (
               <Alert severity="warning">
                 Delivery requires at least one online QR payment method configured for this branch.
@@ -907,50 +889,23 @@ export default function CheckoutPage({ panel = false }) {
             />
             <Box>
               <Typography variant="subtitle2" fontWeight={700}>Payment method</Typography>
-              {isOnsiteFulfillment && (
-                <>
-                  {availablePaymentMethods.some((method) => method.settlement_type === 'pay_at_branch') && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                      Pay at branch
-                    </Typography>
-                  )}
-                  <RadioGroup
-                    value={selectedPaymentMethod?.settlement_type === 'pay_at_branch' ? paymentMethodId : ''}
-                    onChange={(event) => {
-                      setPaymentMethodId(event.target.value)
-                      setErrorMessage('')
-                    }}
-                  >
-                    {availablePaymentMethods
-                      .filter((method) => method.settlement_type === 'pay_at_branch')
-                      .map((method) => (
-                        <FormControlLabel
-                          key={method.id}
-                          value={method.id}
-                          control={<Radio />}
-                          label={method.name}
-                        />
-                      ))}
-                  </RadioGroup>
-                </>
-              )}
-              {onlinePaymentMethods.length > 0 && (
+              {availablePaymentMethods.length > 0 && (
                 <FormControl fullWidth required size="small" sx={{ mt: 1.5 }}>
-                  <InputLabel id="checkout-online-payment-label" shrink>
-                    Online payment
+                  <InputLabel id="checkout-payment-label" shrink>
+                    Payment method
                   </InputLabel>
                   <Select
-                    labelId="checkout-online-payment-label"
-                    label="Online payment"
-                    value={selectedPaymentMethod?.settlement_type === 'provider' ? paymentMethodId : ''}
+                    labelId="checkout-payment-label"
+                    label="Payment method"
+                    value={selectedPaymentMethod?.id || ''}
                     displayEmpty
                     onChange={(event) => {
                       setPaymentMethodId(event.target.value)
                       setErrorMessage('')
                     }}
                   >
-                    <MenuItem value="">Select an online payment method</MenuItem>
-                    {onlinePaymentMethods.map((method) => (
+                    <MenuItem value="">Select a payment method</MenuItem>
+                    {availablePaymentMethods.map((method) => (
                       <MenuItem key={method.id} value={method.id}>
                         {method.name}
                       </MenuItem>
