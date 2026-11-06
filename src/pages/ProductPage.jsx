@@ -1,3 +1,5 @@
+import ProductExtras from '../components/public/ProductExtras.jsx'
+import { getVariantLabel } from '../features/public/menuOptions.js'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import {
@@ -5,9 +7,7 @@ import {
   Box,
   Button,
   Chip,
-  Checkbox,
   Container,
-  Divider,
   FormControl,
   FormControlLabel,
   InputLabel,
@@ -67,6 +67,7 @@ export default function ProductPage() {
   }, [productId, branchId])
 
   const product = loadedProduct.id === productId ? loadedProduct.value : null
+  const variantLabel = getVariantLabel(product?.category?.type)
   const errorMessage = loadError.id === productId ? loadError.message : ''
   const isLoading =
     hasSupabaseConfig && loadedProduct.id !== productId && loadError.id !== productId
@@ -87,7 +88,7 @@ export default function ProductPage() {
       setCartMessage({
         productId,
         severity: 'warning',
-        text: 'Choose a size before adding this item.',
+        text: `Choose a ${variantLabel.toLowerCase()} before adding this item.`,
       })
       return
     }
@@ -107,6 +108,7 @@ export default function ProductPage() {
           id: addon.id,
           name: addon.name,
           price: addon.price,
+          option_kind: addon.option_kind,
         })),
         quantity: 1,
         categoryType: product.category?.type || 'other',
@@ -188,17 +190,17 @@ export default function ProductPage() {
               </Typography>
               {product.variants.length > 0 && (
                 <FormControl required fullWidth>
-                  <InputLabel id="product-size-label">Size</InputLabel>
+                  <InputLabel id="product-size-label">{variantLabel}</InputLabel>
                   <Select
                     labelId="product-size-label"
-                    label="Size"
+                    label={variantLabel}
                     value={selectedVariantId}
                     onChange={(event) =>
                       setVariantSelection({ productId, value: event.target.value })
                     }
                   >
                     <MenuItem value="" disabled>
-                      Choose a size
+                      Choose a {variantLabel.toLowerCase()}
                     </MenuItem>
                     {product.variants.map((variant) => (
                       <MenuItem key={variant.id} value={variant.id}>
@@ -258,43 +260,11 @@ export default function ProductPage() {
                   </RadioGroup>
                 </FormControl>
               )}
-              {product.addons.length > 0 && (
-                <>
-                  <Divider />
-                  <Box>
-                    <Typography variant="h6" gutterBottom>
-                      Add-ons
-                    </Typography>
-                    <Stack spacing={0.5}>
-                      {product.addons.map((addon) => (
-                        <FormControlLabel
-                          key={addon.id}
-                          control={
-                            <Checkbox
-                              checked={selectedAddonIds.includes(addon.id)}
-                              onChange={(event) =>
-                                setAddonSelection((current) => {
-                                  const selected =
-                                    current.productId === productId ? current.values : []
-                                  return {
-                                    productId,
-                                    values: event.target.checked
-                                      ? [...selected, addon.id]
-                                      : selected.filter((id) => id !== addon.id),
-                                  }
-                                })
-                              }
-                            />
-                          }
-                          label={`${addon.name} · ${
-                            addon.price === 0 ? 'Included' : `+${formatPrice(addon.price)}`
-                          }`}
-                        />
-                      ))}
-                    </Stack>
-                  </Box>
-                </>
-              )}
+              <ProductExtras
+                options={product.addons}
+                selectedIds={selectedAddonIds}
+                onChange={(values) => setAddonSelection({ productId, values })}
+              />
               <Typography variant="h6">
                 Item price: {formatPrice(selectedUnitPrice)}
               </Typography>

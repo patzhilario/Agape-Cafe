@@ -1,3 +1,4 @@
+import { getVariantLabel } from '../features/public/menuOptions.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import {
@@ -1042,7 +1043,7 @@ export default function CheckoutPage({ panel = false }) {
                     </Typography>
                     <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between' }}>
                       <Typography variant="body2" color="text.secondary">
-                        {item.variantName ? `Size: ${item.variantName}` : 'Base item'}
+                        {item.variantName ? `${getVariantLabel(item.categoryType)}: ${item.variantName}` : 'Base item'}
                         {item.servingType && (
                           <span> · {item.servingType === 'cup' ? 'Takeout Cup' : 'Glass / Mug'}</span>
                         )}
@@ -1062,7 +1063,7 @@ export default function CheckoutPage({ panel = false }) {
                               {addon.name}
                             </Typography>
                             <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                              {addon.price ? `${formatPrice(addon.price)} each` : 'Included'}
+                              {addon.price ? `${formatPrice(addon.price)} each` : ''}
                             </Typography>
                           </Stack>
                         ))}

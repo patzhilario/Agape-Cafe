@@ -100,7 +100,7 @@ export default function CartPage() {
                     )}
                     {!!item.addons.length && (
                       <Typography variant="body2" color="text.secondary">
-                        Add-ons: {item.addons.map((addon) => addon.name).join(', ')}
+                        Extras: {item.addons.map((addon) => addon.name).join(', ')}
                       </Typography>
                     )}
                     <Typography variant="body2" color="text.secondary">

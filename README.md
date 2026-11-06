@@ -262,6 +262,14 @@ order or financial records can still be permanently deleted; their profile
 links are cleared while the business history is retained. Apply it after
 migration 32 on existing projects.
 
+Migration 34 (`20261106000000_product_flavor_options.sql`) adds a separate
+Flavors section to product options. Apply it after migration 33 and before
+deploying the updated frontend; menu queries require the new `option_kind`
+column. In the catalog editor, use **Add flavor** and leave the price blank
+for no extra charge. Paid flavors use the existing add-on checkout pricing,
+branch overrides, inventory recipes, and saved order details. Drink variants
+are labeled Size; food variants are labeled Meal set.
+
 The foundation migration also creates customer profiles and roles for any
 Supabase Auth users that already exist when the schema is installed. If the
 full setup was already installed before that backfill was added, run

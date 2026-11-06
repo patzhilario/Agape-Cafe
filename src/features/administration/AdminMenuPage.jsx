@@ -1,3 +1,4 @@
+import { getVariantLabel } from '../public/menuOptions.js'
 import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
@@ -93,6 +94,8 @@ function AdminMenuPage() {
   const [productSearch, setProductSearch] = useState('')
   const [categorySearch, setCategorySearch] = useState('')
   const editingProduct = products.find((product) => product.id === editingProductId)
+  const variantLabelFor = (product) => getVariantLabel(categories.find((category) => category.id === product?.category_id)?.type)
+  const optionDialogLabel = optionDialogType === 'variant' ? variantLabelFor(editingProduct) : optionDialogType === 'flavor' ? 'Flavor' : 'Add-on'
   const filteredBranchProducts = useMemo(() => {
     const q = branchSearch.trim().toLowerCase()
     if (!q) return products
@@ -164,7 +167,7 @@ function AdminMenuPage() {
           return data
         }),
       getSupabaseClient().from('product_addons')
-        .select('id, product_id, name, price, is_active')
+        .select('id, product_id, name, price, is_active, option_kind')
         .order('sort_order')
         .then(({ data, error }) => {
           if (error) throw new Error(error.message)
@@ -366,12 +369,12 @@ function AdminMenuPage() {
     const draft = optionDrafts[product.id] || {}
     const isVariant = optionType === 'variant'
     const table = isVariant ? 'product_variants' : 'product_addons'
-    const optionLabel = isVariant ? 'size' : 'add-on'
-    const name = ((isVariant ? draft.variantName : draft.addonName) || '').trim()
-    const rawPrice = isVariant ? draft.variantPrice : draft.addonPrice
+    const optionLabel = isVariant ? variantLabelFor(product).toLowerCase() : optionType === 'flavor' ? 'flavor' : 'add-on'
+    const name = (draft[`${optionType}Name`] || '').trim()
+    const rawPrice = draft[`${optionType}Price`] ?? ''
     const price = Number(rawPrice)
-    if (!name || rawPrice === '' || !Number.isFinite(price) || price < 0) {
-      setErrorMessage(`Enter a name and price of 0 or more for this ${optionLabel}.`)
+    if (!name || (isVariant && rawPrice === '') || !Number.isFinite(price) || price < 0) {
+      setErrorMessage(`Enter a name and a valid price for this ${optionLabel}. Extras may have a blank price.`)
       return
     }
     setIsSaving(true)
@@ -382,7 +385,8 @@ function AdminMenuPage() {
         product_id: product.id,
         name,
         price,
-      }).select('id, product_id, name, price, is_active').single()
+        ...(!isVariant ? { option_kind: optionType === 'flavor' ? 'flavor' : 'addon' } : {}),
+      }).select(isVariant ? 'id, product_id, name, price, is_active' : 'id, product_id, name, price, is_active, option_kind').single()
       if (error) throw new Error(error.message)
       if (isVariant) {
         setVariants((current) => [...current, data])
@@ -394,10 +398,10 @@ function AdminMenuPage() {
         setAddons((current) => [...current, data])
         setOptionDrafts((current) => ({
           ...current,
-          [product.id]: { ...current[product.id], addonName: '', addonPrice: '' },
+          [product.id]: { ...current[product.id], [`${optionType}Name`]: '', [`${optionType}Price`]: '' },
         }))
       }
-      setSuccessMessage(`${isVariant ? 'Size' : 'Add-on'} “${data.name}” saved to the database for ${product.name}.`)
+      setSuccessMessage(`${optionLabel} “${data.name}” saved to the database for ${product.name}.`)
       setOptionDialogType('')
     } catch (error) {
       console.error('Unable to add product option.', error)
@@ -627,7 +631,7 @@ function AdminMenuPage() {
           <Box>
             <Typography variant="overline" color="primary">Agapé Café · Catalog</Typography>
             <Typography variant="h2">Menu</Typography>
-            <Typography color="text.secondary">Manage this branch’s prices, availability, sizes, and add-ons without changing other branches’ catalog.</Typography>
+            <Typography color="text.secondary">Manage this branch’s prices, availability, options, add-ons, and flavors without changing other branches’ catalog.</Typography>
           </Box>
           {isSuperAdmin && (menuView === 'catalog' || menuView === 'products') && (
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap sx={{ width: { xs: '100%', md: 'auto' }, flexWrap: 'wrap' }}>
@@ -683,7 +687,7 @@ function AdminMenuPage() {
         </Tabs>
         {menuView === 'branch' && (
           <Alert severity="info">
-            Edit branch prices and turn individual sizes or add-ons on or off. These settings apply only to the selected branch; shared product details stay unchanged.
+            Edit branch prices and turn individual options, add-ons, or flavors on or off. These settings apply only to the selected branch; shared product details stay unchanged.
           </Alert>
         )}
         {menuView === 'branch' && !branches.some((branch) => branch.is_active) && (
@@ -862,8 +866,8 @@ function AdminMenuPage() {
                                 slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
                                 helperText={variants.some((variant) => variant.product_id === product.id)
                                   ? branchEdit.priceOverride === ''
-                                    ? 'Sizes follow catalog prices'
-                                    : 'Adjusts all size prices by the same amount'
+                                    ? `${variantLabelFor(product)} options follow catalog prices`
+                                    : 'Adjusts all variant prices by the same amount'
                                   : branchEdit.priceOverride === ''
                                     ? 'Uses catalog price'
                                     : ''}
@@ -901,7 +905,7 @@ function AdminMenuPage() {
                                   !addons.some((addon) => addon.product_id === product.id))
                               }
                             >
-                              Edit sizes / add-ons
+                              Edit options / extras
                             </Button>
                             <Button
                               variant="contained"
@@ -956,7 +960,7 @@ function AdminMenuPage() {
             maxWidth="md"
           >
             <DialogTitle>
-              Branch sizes and add-ons{branchOptionsProduct ? ` · ${branchOptionsProduct.name}` : ''}
+              Branch options, add-ons and flavors{branchOptionsProduct ? ` · ${branchOptionsProduct.name}` : ''}
             </DialogTitle>
             <DialogContent>
               <Stack spacing={3} sx={{ pt: 1 }}>
@@ -967,22 +971,30 @@ function AdminMenuPage() {
                 {[
                   {
                     type: 'variant',
-                    title: 'Sizes',
+                    title: variantLabelFor(branchOptionsProduct) + ' options',
                     options: variants.filter((option) =>
                       option.product_id === branchOptionsProduct?.id && option.is_active,
                     ),
-                    priceLabel: 'Branch size price',
+                    priceLabel: 'Branch option price',
                   },
                   {
                     type: 'addon',
                     title: 'Add-ons',
                     options: addons.filter((option) =>
-                      option.product_id === branchOptionsProduct?.id && option.is_active,
+                      option.product_id === branchOptionsProduct?.id && option.is_active && option.option_kind !== 'flavor',
                     ),
                     priceLabel: 'Branch add-on price',
                   },
+                  {
+                    type: 'addon',
+                    title: 'Flavors',
+                    options: addons.filter((option) =>
+                      option.product_id === branchOptionsProduct?.id && option.is_active && option.option_kind === 'flavor',
+                    ),
+                    priceLabel: 'Branch flavor price',
+                  },
                 ].filter((group) => group.options.length > 0).map((group) => (
-                  <Stack key={group.type} spacing={1}>
+                  <Stack key={group.title} spacing={1}>
                     <Typography variant="h6">{group.title}</Typography>
                     {group.options.map((option) => {
                       const key = `${group.type}:${option.id}`
@@ -1057,7 +1069,7 @@ function AdminMenuPage() {
                 ))}
                 {!variants.some((option) => option.product_id === branchOptionsProduct?.id && option.is_active) &&
                   !addons.some((option) => option.product_id === branchOptionsProduct?.id && option.is_active) && (
-                    <Typography color="text.secondary">No active sizes or add-ons are configured for this product.</Typography>
+                    <Typography color="text.secondary">No active options, add-ons or flavors are configured for this product.</Typography>
                 )}
               </Stack>
             </DialogContent>
@@ -1254,17 +1266,20 @@ function AdminMenuPage() {
                       <Stack spacing={1}>
                         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
                           <Box>
-                            <Typography variant="subtitle1" fontWeight={700}>Sizes and add-ons</Typography>
+                            <Typography variant="subtitle1" fontWeight={700}>{variantLabelFor(product)} options, add-ons and flavors</Typography>
                             <Typography variant="body2" color="text.secondary">
                               Manage options separately from the product details.
                             </Typography>
                           </Box>
-                          <Stack direction="row" spacing={1}>
+                          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
                             <Button size="small" variant="outlined" onClick={() => setOptionDialogType('variant')}>
-                              Add size
+                              Add {variantLabelFor(product).toLowerCase()}
                             </Button>
                             <Button size="small" variant="outlined" onClick={() => setOptionDialogType('addon')}>
                               Add add-on
+                            </Button>
+                            <Button size="small" variant="outlined" onClick={() => setOptionDialogType('flavor')}>
+                              Add flavor
                             </Button>
                           </Stack>
                         </Stack>
@@ -1275,7 +1290,7 @@ function AdminMenuPage() {
                             .map((entry) => ({ ...entry, type: 'addon' })),
                         ].length ? (
                           <TableContainer component={Paper} variant="outlined">
-                            <Table size="small" aria-label={`${product.name} sizes and add-ons`}>
+                            <Table size="small" aria-label={`${product.name} options, add-ons and flavors`}>
                               <TableHead>
                                 <TableRow>
                                   <TableCell>Type</TableCell>
@@ -1293,9 +1308,9 @@ function AdminMenuPage() {
                                     .map((entry) => ({ ...entry, type: 'addon' })),
                                 ].map((option) => (
                                   <TableRow key={`${option.type}-${option.id}`}>
-                                    <TableCell>{option.type === 'variant' ? 'Size' : 'Add-on'}</TableCell>
+                                    <TableCell>{option.type === 'variant' ? variantLabelFor(product) : option.option_kind === 'flavor' ? 'Flavor' : 'Add-on'}</TableCell>
                                     <TableCell>{option.name}</TableCell>
-                                    <TableCell align="right">{formatPrice(option.price)}</TableCell>
+                                    <TableCell align="right">{option.type === 'variant' || Number(option.price) > 0 ? formatPrice(option.price) : ''}</TableCell>
                                     <TableCell>
                                       <FormControlLabel
                                         control={<Switch size="small" checked={option.is_active} disabled={isSaving} onChange={(event) => setOptionActive(option, option.type, event.target.checked)} />}
@@ -1319,7 +1334,7 @@ function AdminMenuPage() {
                           </TableContainer>
                         ) : (
                           <Typography variant="body2" color="text.secondary">
-                            No sizes or add-ons have been added yet.
+                            No options, add-ons or flavors have been added yet.
                           </Typography>
                         )}
                       </Stack>
@@ -1339,20 +1354,19 @@ function AdminMenuPage() {
             fullWidth
             maxWidth="xs"
           >
-            <DialogTitle>{optionDialogType === 'variant' ? 'Add size' : 'Add add-on'}</DialogTitle>
+            <DialogTitle>{`Add ${optionDialogLabel.toLowerCase()}`}</DialogTitle>
             <DialogContent>
+              {errorMessage && <Alert severity="error" sx={{ mt: 1 }}>{errorMessage}</Alert>}
               <Stack spacing={2} sx={{ pt: 1 }}>
                 <TextField
                   autoFocus
-                  label={optionDialogType === 'variant' ? 'Size name' : 'Add-on name'}
-                  value={optionDialogType === 'variant'
-                    ? optionDrafts[editingProduct?.id]?.variantName || ''
-                    : optionDrafts[editingProduct?.id]?.addonName || ''}
+                  label={`${optionDialogLabel} name`}
+                  value={optionDrafts[editingProduct?.id]?.[`${optionDialogType}Name`] || ''}
                   onChange={(event) => setOptionDrafts((state) => ({
                     ...state,
                     [editingProduct.id]: {
                       ...state[editingProduct.id],
-                      [optionDialogType === 'variant' ? 'variantName' : 'addonName']: event.target.value,
+                      [`${optionDialogType}Name`]: event.target.value,
                     },
                   }))}
                   required
@@ -1360,18 +1374,17 @@ function AdminMenuPage() {
                 <TextField
                   label="Price (PHP)"
                   type="number"
-                  value={optionDialogType === 'variant'
-                    ? optionDrafts[editingProduct?.id]?.variantPrice || ''
-                    : optionDrafts[editingProduct?.id]?.addonPrice || ''}
+                  value={optionDrafts[editingProduct?.id]?.[`${optionDialogType}Price`] || ''}
                   onChange={(event) => setOptionDrafts((state) => ({
                     ...state,
                     [editingProduct.id]: {
                       ...state[editingProduct.id],
-                      [optionDialogType === 'variant' ? 'variantPrice' : 'addonPrice']: event.target.value,
+                      [`${optionDialogType}Price`]: event.target.value,
                     },
                   }))}
                   slotProps={{ htmlInput: { min: '0', step: '0.01' } }}
-                  required
+                  helperText={optionDialogType === 'variant' ? 'Full price for this option.' : 'Optional. Leave blank for no extra charge.'}
+                  required={optionDialogType === 'variant'}
                 />
               </Stack>
             </DialogContent>
@@ -1382,7 +1395,7 @@ function AdminMenuPage() {
                 disabled={isSaving || !editingProduct}
                 onClick={() => editingProduct && void createOption(editingProduct, optionDialogType)}
               >
-                {isSaving ? 'Saving…' : optionDialogType === 'variant' ? 'Add size' : 'Add add-on'}
+                {isSaving ? 'Saving…' : `Add ${optionDialogLabel.toLowerCase()}`}
               </Button>
             </DialogActions>
           </Dialog>
@@ -1400,7 +1413,7 @@ function AdminMenuPage() {
         detail={deleteTarget?.type === 'category'
           ? 'Products in this category will remain in the catalog without a category.'
           : deleteTarget?.type === 'product'
-            ? 'The product, its sizes/add-ons, branch stock and recipe links will be removed. Existing orders keep their saved item details.'
+            ? 'The product, its options/add-ons/flavors, branch stock and recipe links will be removed. Existing orders keep their saved item details.'
             : 'Existing orders keep their saved option details.'}
         warning="This action cannot be undone."
         errorMessage={errorMessage}

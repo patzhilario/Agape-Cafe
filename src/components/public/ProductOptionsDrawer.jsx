@@ -4,7 +4,6 @@ import {
   Alert,
   Box,
   Button,
-  Checkbox,
   Divider,
   Drawer,
   FormControl,
@@ -17,10 +16,13 @@ import {
   Typography,
 } from '@mui/material'
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined'
+import ProductExtras from './ProductExtras.jsx'
+import { getVariantLabel } from '../../features/public/menuOptions.js'
 import QuantityStepper from './QuantityStepper.jsx'
 import { formatPrice } from '../../features/public/publicData.js'
 
 export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
+  const variantLabel = getVariantLabel(product.category?.type)
   const isDrink = product.category?.type === 'drink'
   const [servingType, setServingType] = useState('glass')
   const [variantId, setVariantId] = useState('')
@@ -35,7 +37,7 @@ export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
   function addProductToCart() {
     setErrorMessage('')
     if (product.variants.length && !variant) {
-      setErrorMessage('Choose a size first.')
+      setErrorMessage(`Choose a ${variantLabel.toLowerCase()} first.`)
       return
     }
     try {
@@ -46,7 +48,7 @@ export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
         variantId: variant?.id || '',
         variantName: variant?.name || '',
         variantPrice: variant?.price ?? product.price,
-        addons: selectedAddons.map(({ id, name, price }) => ({ id, name, price })),
+        addons: selectedAddons.map(({ id, name, price, option_kind }) => ({ id, name, price, option_kind })),
         quantity,
         categoryType: product.category?.type || 'other',
         servingType: isDrink ? servingType : null,
@@ -88,7 +90,7 @@ export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
             {product.name}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Make it yours by choosing a size and any extras.
+            Choose your options and any extras.
           </Typography>
         </Box>
         <IconButton aria-label="Close item options" onClick={onClose} edge="end">
@@ -103,7 +105,7 @@ export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
             <FormControl required>
               <Stack spacing={1.25}>
                 <Box>
-                  <Typography variant="h6" fontWeight={700}>Choose a size</Typography>
+                  <Typography variant="h6" fontWeight={700}>Choose a {variantLabel.toLowerCase()}</Typography>
                   <Typography variant="body2" color="text.secondary">
                     Select one option to continue.
                   </Typography>
@@ -155,7 +157,7 @@ export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
             </FormControl>
           ) : (
             <Alert severity="info">
-              This item has one size. Base price: {formatPrice(product.price)}.
+              Base price: {formatPrice(product.price)}.
             </Alert>
           )}
  
@@ -214,74 +216,7 @@ export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
             </FormControl>
           )}
 
-          {product.addons.length > 0 && (
-            <Box>
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1.25 }}
-              >
-                <Box>
-                  <Typography variant="h6" fontWeight={700}>Add something extra</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Optional · choose as many as you like
-                  </Typography>
-                </Box>
-                {!!selectedAddons.length && (
-                  <Typography variant="caption" color="primary" fontWeight={700}>
-                    {selectedAddons.length} selected
-                  </Typography>
-                )}
-              </Stack>
-              <Stack spacing={1}>
-                {product.addons.map((addon) => {
-                  const selected = addonIds.includes(addon.id)
-                  return (
-                    <Paper
-                      key={addon.id}
-                      variant="outlined"
-                      sx={{
-                        borderRadius: 2.5,
-                        borderColor: selected ? 'primary.main' : 'divider',
-                        bgcolor: selected ? 'rgba(91, 57, 39, 0.05)' : 'background.paper',
-                        transition: 'background-color 150ms ease, border-color 150ms ease',
-                      }}
-                    >
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={selected}
-                            onChange={(event) => {
-                              setAddonIds((current) => (
-                                event.target.checked
-                                  ? [...current, addon.id]
-                                  : current.filter((id) => id !== addon.id)
-                              ))
-                            }}
-                          />
-                        }
-                        label={
-                          <Stack
-                            direction="row"
-                            spacing={1}
-                            sx={{ alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
-                          >
-                            <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>
-                              {addon.name}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap', pr: 1 }}>
-                              {addon.price ? `+${formatPrice(addon.price)}` : 'Included'}
-                            </Typography>
-                          </Stack>
-                        }
-                        sx={{ m: 0, width: '100%', minHeight: 56, pl: 0.5, pr: 0.5 }}
-                      />
-                    </Paper>
-                  )
-                })}
-              </Stack>
-            </Box>
-          )}
+          <ProductExtras options={product.addons} selectedIds={addonIds} onChange={setAddonIds} />
 
           <Paper variant="outlined" sx={{ p: 1.75, borderRadius: 2.5 }}>
             <Stack
@@ -318,7 +253,7 @@ export default function ProductOptionsDrawer({ product, onAdd, onClose }) {
           startIcon={<ShoppingBagOutlinedIcon />}
           sx={{ minHeight: 52, borderRadius: 2.5 }}
         >
-          {product.variants.length > 0 && !variant ? 'Choose a size to continue' : 'Add to cart'}
+          {product.variants.length > 0 && !variant ? `Choose a ${variantLabel.toLowerCase()} to continue` : 'Add to cart'}
         </Button>
       </Stack>
     </Drawer>

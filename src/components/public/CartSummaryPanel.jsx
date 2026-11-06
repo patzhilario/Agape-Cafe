@@ -1,3 +1,4 @@
+import { getVariantLabel } from '../../features/public/menuOptions.js'
 import {
   Alert,
   Box,
@@ -86,7 +87,7 @@ export default function CartSummaryPanel({ title = 'Your cart', onCheckout, onCl
                           {item.productName}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-                          {item.variantName ? `Size: ${item.variantName}` : 'Regular'}
+                          {item.variantName ? `${getVariantLabel(item.categoryType)}: ${item.variantName}` : 'Regular'}
                         </Typography>
                       </Box>
                       <Typography fontWeight={700} sx={{ whiteSpace: 'nowrap' }}>
@@ -101,7 +102,7 @@ export default function CartSummaryPanel({ title = 'Your cart', onCheckout, onCl
                               + {addon.name}
                             </Typography>
                             <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                              {addon.price ? `${formatPrice(addon.price)} each` : 'Included'}
+                              {addon.price ? `${formatPrice(addon.price)} each` : ''}
                             </Typography>
                           </Stack>
                         ))}

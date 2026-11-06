@@ -80,7 +80,7 @@ function productSelection() {
     is_best_seller,
     category:categories(name, slug, type),
     product_variants(id, name, price, sort_order, is_active),
-    product_addons(id, name, price, sort_order, is_active)
+    product_addons(id, name, price, sort_order, is_active, option_kind)
   `
 }
 
@@ -184,7 +184,7 @@ async function loadPublicProducts({ branchId, featured, limit, productId } = {})
         : Promise.resolve({ data: [], error: null }),
     ])
     if (variantSettingsResult.error) {
-      throw new Error(`Could not load branch size settings: ${variantSettingsResult.error.message}`)
+      throw new Error(`Could not load branch product option settings: ${variantSettingsResult.error.message}`)
     }
     if (addonSettingsResult.error) {
       throw new Error(`Could not load branch add-on settings: ${addonSettingsResult.error.message}`)
