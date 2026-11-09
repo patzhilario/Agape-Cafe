@@ -16,6 +16,7 @@ import {
   Typography,
 } from '@mui/material'
 import { getCustomerOrders } from '../features/orders/orderData.js'
+import { formatOrderDate as formatDate } from '../features/orders/formatOrderDate.js'
 import PaginationControls from '../components/PaginationControls.jsx'
 import { formatPrice } from '../features/public/publicData.js'
 import {
@@ -25,13 +26,6 @@ import {
 } from '../components/public/PublicDataState.jsx'
 
 const DEFAULT_PAGE_SIZE = 10
-
-function formatDate(value) {
-  return new Intl.DateTimeFormat('en-PH', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
-}
 
 function formatStatus(value) {
   return value

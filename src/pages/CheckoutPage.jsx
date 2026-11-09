@@ -905,7 +905,6 @@ export default function CheckoutPage({ panel = false }) {
                       setErrorMessage('')
                     }}
                   >
-                    <MenuItem value="">Select a payment method</MenuItem>
                     {availablePaymentMethods.map((method) => (
                       <MenuItem key={method.id} value={method.id}>
                         {method.name}

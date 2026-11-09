@@ -83,14 +83,19 @@ export async function createCustomerOrder({
   })
 
   if (error) {
-    console.error('Order submission was rejected by the database.', error)
-    throw new Error(mapOrderError(error.message))
+    console.error('Order submission was rejected by the database.', JSON.stringify({
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    }))
+    throw new Error(mapOrderError(error))
   }
   return data
 }
 
 export async function getCustomerOrders(page = 0, pageSize = 25) {
-  const { data, error } = await getSupabaseClient()
+  const { data, error, count } = await getSupabaseClient()
     .from('orders')
     .select(`
       id, order_number, branch_id, customer_name, customer_phone,
@@ -111,11 +116,11 @@ export async function getCustomerOrders(page = 0, pageSize = 25) {
     .range(page * pageSize, (page + 1) * pageSize - 1)
 
   if (error) throw new Error(`Could not load your orders: ${error.message}`)
-  return data
+  return { data: data ?? [], count: count ?? 0 }
 }
 
 export async function getCustomerOrder(orderId) {
-  const { data, error, count } = await getSupabaseClient()
+  const { data, error } = await getSupabaseClient()
     .from('orders')
     .select(`
       id, order_number, branch_id, customer_name, customer_email, customer_phone,
@@ -137,7 +142,7 @@ export async function getCustomerOrder(orderId) {
     .maybeSingle()
 
   if (error) throw new Error(`Could not load order details: ${error.message}`)
-  return { data, count: count ?? 0 }
+  return data
 }
 
 export async function submitOrderPaymentProof(orderId, documentPath, referenceNumber) {
@@ -168,7 +173,7 @@ export async function getOrderPaymentProofUrl(path) {
   return data.signedUrl
 }
 
-function mapOrderError(message) {
+function mapOrderError({ message = '', code }) {
   const knownErrors = [
     'Sign in to place an order.',
     'This account is not active.',
@@ -201,8 +206,21 @@ function mapOrderError(message) {
     'One or more selected order lines are invalid.',
     'Upload a private document under your own request folder.',
     'A benefit discount must be requested on an unpaid, active order.',
+    'Sign in with an active account to place an order.',
+    'Choose your dine-in table.',
+    'A dining table can only be selected for dine-in orders.',
+    'That table is unavailable. Refresh the table list and choose another.',
+    'That table has just been reserved. Refresh the table list and choose another.',
+    'Choose an active payment method configured for this branch.',
+    'This online payment method does not have a QR code configured.',
+    'Pick-up and delivery orders require an online QR payment method.',
+    'Choose a supported order type.',
+    'Each cart item quantity must be between 1 and 20.',
   ]
   const matchingError = knownErrors.find((known) => message.includes(known))
   if (matchingError) return matchingError
-  return 'We could not place the order. Please refresh the menu and try again.'
+  if (code === 'PGRST202') {
+    return 'Checkout is temporarily unavailable. Please ask the shop to check its database setup.'
+  }
+  return `We could not place the order. Please refresh the menu and try again.${code ? ` Error code: ${code}.` : ''}`
 }

@@ -21,18 +21,12 @@ import {
 import { formatPrice } from '../features/public/publicData.js'
 import { getCustomerBenefitRequest } from '../features/discounts/benefitData.js'
 import { getSupabaseClient } from '../lib/supabaseClient.js'
+import { formatOrderDate as formatDate } from '../features/orders/formatOrderDate.js'
 import {
   EmptyPublicState,
   PublicDataError,
   PublicLoading,
 } from '../components/public/PublicDataState.jsx'
-
-function formatDate(value) {
-  return new Intl.DateTimeFormat('en-PH', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
-}
 
 function formatStatus(value) {
   return value
