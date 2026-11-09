@@ -58,14 +58,9 @@ export async function getOrders(branchId, page = 0, pageSize = 50, filters = {})
     payment_proof: relationshipArray(order.payment_proof),
     benefit_request: relationshipArray(order.benefit_request),
   }))
-  // Unpaid orders float to the top (first-come, first-served within each group)
+  // Preserve the database's oldest-first queue across payment and order statuses.
   return {
-    orders: orders.sort((a, b) => {
-      const aUnpaid = a.payment_status === 'unpaid' ? 0 : 1
-      const bUnpaid = b.payment_status === 'unpaid' ? 0 : 1
-      if (aUnpaid !== bUnpaid) return aUnpaid - bUnpaid
-      return new Date(a.created_at) - new Date(b.created_at)
-    }),
+    orders,
     count: count ?? 0,
   }
 }

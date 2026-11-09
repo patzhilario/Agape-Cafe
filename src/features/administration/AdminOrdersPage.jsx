@@ -261,6 +261,9 @@ export default function AdminOrdersPage() {
             Review orders visible to your assigned branches, advance fulfillment,
             record branch payments, or cancel with a reason.
           </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Oldest orders appear first in every status, based on when the order was placed.
+          </Typography>
         </Box>
         {!account.roles.includes('super_admin') && (
           <FormControl fullWidth>

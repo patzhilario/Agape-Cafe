@@ -35,6 +35,9 @@ export default function ProductCard({ product }) {
         variant="outlined"
         sx={{
           height: '100%',
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
           overflow: 'hidden',
           borderRadius: 3,
           borderColor: 'rgba(67, 48, 34, 0.14)',
@@ -47,10 +50,15 @@ export default function ProductCard({ product }) {
           },
         }}
       >
-        <CardActionArea component={RouterLink} to={`/menu/${product.id}`}>
+        <CardActionArea
+          component={RouterLink}
+          to={`/menu/${product.id}`}
+          sx={{ display: 'flex', flexDirection: 'column', flex: 1, alignItems: 'stretch' }}
+        >
           <Box
             sx={{
               position: 'relative',
+              flexShrink: 0,
               aspectRatio: '1.12 / 1',
               bgcolor: '#eee7dd',
               overflow: 'hidden',
@@ -88,39 +96,35 @@ export default function ProductCard({ product }) {
               />
             )}
           </Box>
-          <CardContent sx={{ px: 2.25, pt: 2.25, pb: 1.5 }}>
-            <Stack spacing={0.9}>
-              {product.category?.name && (
-                <Typography variant="overline" color="primary" sx={{ letterSpacing: '.12em', lineHeight: 1.4 }}>
-                  {product.category.name}
-                </Typography>
-              )}
-              <Typography variant="h6" component="h3" sx={{ fontWeight: 750, lineHeight: 1.25 }}>
+          <CardContent sx={{ px: 2.25, pt: 2.25, pb: 1.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <Stack spacing={0.9} sx={{ flex: 1 }}>
+              <Typography variant="overline" color="primary" sx={{ letterSpacing: '.12em', lineHeight: 1.4, minHeight: '1.4em', overflowWrap: 'anywhere' }}>
+                {product.category?.name || '\u00a0'}
+              </Typography>
+              <Typography variant="h6" component="h3" sx={{ fontWeight: 750, lineHeight: 1.25, minHeight: '2.5em', flex: 1, overflowWrap: 'anywhere' }}>
                 {product.name}
               </Typography>
-              {product.description && (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    minHeight: '2.8em',
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {product.description}
-                </Typography>
-              )}
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  minHeight: '2.8em',
+                  lineHeight: 1.4,
+                }}
+              >
+                {product.description || '\u00a0'}
+              </Typography>
               <Typography variant="body1" color="primary.dark" fontWeight={800} sx={{ pt: 0.25 }}>
                 {product.variants.length ? `From ${formatPrice(lowestPrice)}` : formatPrice(lowestPrice)}
               </Typography>
             </Stack>
           </CardContent>
         </CardActionArea>
-        <CardContent sx={{ px: 2.25, pt: 0, pb: 2.25 }}>
+        <CardContent sx={{ px: 2.25, pt: 0, pb: 2.25, flexShrink: 0 }}>
           <Button
             variant="contained"
             fullWidth
