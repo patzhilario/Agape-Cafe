@@ -160,6 +160,7 @@ export default function AdminBranchesPage() {
       .from('branch_dining_tables')
       .select('id, label, is_active')
       .eq('branch_id', branch.id)
+      .is('deleted_at', null)
       .order('label')
       .then(({ data, error }) => {
         if (error) throw new Error(error.message)
@@ -369,6 +370,7 @@ export default function AdminBranchesPage() {
         .from('branch_dining_tables')
         .select('id, label, is_active')
         .eq('branch_id', draft.id)
+        .is('deleted_at', null)
         .order('label')
       if (error) throw new Error(error.message)
       setBranchDiningTables(data)
@@ -507,18 +509,14 @@ export default function AdminBranchesPage() {
     setErrorMessage('')
     setSuccessMessage('')
     try {
-      const { data, error } = await getSupabaseClient()
-        .from('branch_dining_tables')
-        .delete()
-        .eq('id', table.id)
-        .eq('branch_id', draft.id)
-        .select('id')
-        .maybeSingle()
+      const { error } = await getSupabaseClient().rpc('delete_branch_dining_table', {
+        target_table_id: table.id,
+        target_branch_id: draft.id,
+      })
       if (error) throw new Error(error.message)
-      if (!data) throw new Error('This dining table no longer exists. Refresh the page and try again.')
       setBranchDiningTables((current) => current.filter((entry) => entry.id !== table.id))
       setDeleteTarget(null)
-      setSuccessMessage(`${table.label} was permanently deleted.`)
+      setSuccessMessage(`${table.label} was removed. Past orders keep their table details.`)
     } catch (error) {
       console.error('Unable to delete branch dining table.', error)
       setErrorMessage(error.message)
@@ -948,11 +946,12 @@ export default function AdminBranchesPage() {
       </Dialog>
       <DeleteConfirmationDialog
         open={Boolean(deleteTarget)}
+        permanent={deleteTarget?.type !== 'dining_table'}
         title={deleteTarget?.type === 'branch'
           ? 'Permanently delete branch?'
           : deleteTarget?.type === 'payment_method'
             ? 'Permanently delete payment method?'
-            : 'Permanently delete dining table?'}
+            : 'Remove dining table?'}
         itemName={deleteTarget?.type === 'branch'
           ? deleteTarget.record.name
           : deleteTarget?.type === 'payment_method'
@@ -967,8 +966,10 @@ export default function AdminBranchesPage() {
           ? 'Its payment methods, QR codes, dining tables, and branch-specific menu/stock settings will also be removed. Branches referenced by orders, staff assignments, or financial records are protected and cannot be deleted.'
           : deleteTarget?.type === 'payment_method'
             ? 'Past payments keep their transaction details. This payment method will no longer be available.'
-            : 'A dining table referenced by an order cannot be deleted. Disable it instead to keep its order history.'}
-        warning="Permanent deletion cannot be undone."
+            : 'This table will be removed from the table list and cannot be selected for new orders. Past orders keep their table details. Complete or cancel any ongoing order first.'}
+        warning={deleteTarget?.type === 'dining_table'
+          ? 'This table cannot be restored from this screen.'
+          : 'Permanent deletion cannot be undone.'}
         errorMessage={errorMessage}
         isDeleting={isDeleting}
         onCancel={() => setDeleteTarget(null)}

@@ -18,6 +18,7 @@ export default function DeleteConfirmationDialog({
   warning = 'This action cannot be undone.',
   errorMessage = '',
   isDeleting = false,
+  permanent = true,
   onCancel,
   onConfirm,
 }) {
@@ -33,7 +34,7 @@ export default function DeleteConfirmationDialog({
       <DialogContent>
         <Stack spacing={1.5}>
           <Typography variant="body2">
-            Permanently delete <strong>{itemName}</strong> {itemType}?
+            {permanent ? 'Permanently delete' : 'Remove'} <strong>{itemName}</strong> {itemType}?
           </Typography>
           {detail && <Typography variant="body2" color="text.secondary">{detail}</Typography>}
           {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
@@ -48,7 +49,7 @@ export default function DeleteConfirmationDialog({
           onClick={onConfirm}
           disabled={isDeleting}
         >
-          {isDeleting ? 'Deleting…' : 'Delete permanently'}
+          {isDeleting ? 'Deleting…' : permanent ? 'Delete permanently' : 'Remove table'}
         </Button>
       </DialogActions>
     </Dialog>

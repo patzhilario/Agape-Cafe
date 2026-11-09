@@ -195,8 +195,7 @@ export default function OrderDetailPage() {
         </Button>
         {searchParams.get('placed') === '1' && (
           <Alert severity="success">
-            Order received. Payment is not marked paid until authorized staff
-            confirms it at the branch.
+            Order received.
           </Alert>
         )}
         {errorMessage && <PublicDataError message={errorMessage} />}
