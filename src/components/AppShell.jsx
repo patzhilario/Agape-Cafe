@@ -9,6 +9,7 @@ import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined'
 import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined'
 import FacebookIcon from '@mui/icons-material/Facebook'
 import InstagramIcon from '@mui/icons-material/Instagram'
+import SvgIcon from '@mui/material/SvgIcon'
 import { Link as RouterLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/useAuth.js'
 import { useCart } from '../features/orders/useCart.js'
@@ -338,7 +339,7 @@ export default function AppShell({ children }) {
                 <Stack direction="row" spacing={1.25} sx={{ pt: 0.5 }}>
                   <IconButton
                     component="a"
-                    href="https://facebook.com"
+                    href="https://www.facebook.com/p/Agape-Caf%C3%A9-Calamba-61572641432555/"
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Agapé Café on Facebook"
@@ -356,7 +357,7 @@ export default function AppShell({ children }) {
                   </IconButton>
                   <IconButton
                     component="a"
-                    href="https://instagram.com"
+                    href="https://www.instagram.com/agape.cafe_/"
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Agapé Café on Instagram"
@@ -371,6 +372,26 @@ export default function AppShell({ children }) {
                     }}
                   >
                     <InstagramIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                  <IconButton
+                    component="a"
+                    href="https://www.tiktok.com/@agapecafe_"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Agapé Café on TikTok"
+                    size="small"
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      color: 'rgba(255,250,244,0.85)',
+                      bgcolor: 'rgba(255,250,244,0.06)',
+                      border: '1px solid rgba(255,250,244,0.12)',
+                      '&:hover': { bgcolor: 'rgba(216, 177, 138, 0.2)', color: '#d8b18a', borderColor: '#d8b18a' },
+                    }}
+                  >
+                    <SvgIcon sx={{ fontSize: 18 }}>
+                      <path d="M16.6 2c.3 2.6 1.8 4.2 4.4 4.4v3.3a8.3 8.3 0 0 1-4.4-1.3v7.3a6.3 6.3 0 1 1-5.4-6.2v3.4a3 3 0 1 0 2.1 2.8V2z" />
+                    </SvgIcon>
                   </IconButton>
                 </Stack>
               </Stack>
@@ -531,7 +552,7 @@ export default function AppShell({ children }) {
                       Mon – Sat
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'rgba(255,250,244,0.72)', display: 'block' }}>
-                      8:00 AM – 10:00 PM
+                      12:00 PM – 10:00 PM
                     </Typography>
                   </Box>
                 </Stack>
@@ -542,7 +563,7 @@ export default function AppShell({ children }) {
                       Sunday
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'rgba(255,250,244,0.72)', display: 'block' }}>
-                      9:00 AM – 9:00 PM
+                      11:00 AM – 10:00 PM
                     </Typography>
                   </Box>
                 </Stack>
@@ -571,14 +592,14 @@ export default function AppShell({ children }) {
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
                   <LocationOnOutlinedIcon sx={{ fontSize: 17, color: '#d8b18a', mt: 0.3, flexShrink: 0 }} />
                   <Typography variant="body2" sx={{ color: 'rgba(255,250,244,0.75)', lineHeight: 1.5, fontSize: '0.875rem' }}>
-                    Multiple branches across Metro Manila
+                    Branches in Calamba and Sto. Tomas
                   </Typography>
                 </Stack>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <PhoneOutlinedIcon sx={{ fontSize: 17, color: '#d8b18a', flexShrink: 0 }} />
                   <Typography
                     component="a"
-                    href="tel:+639123456789"
+                    href="tel:+639928505785"
                     variant="body2"
                     sx={{
                       color: 'rgba(255,250,244,0.75)',
@@ -587,23 +608,25 @@ export default function AppShell({ children }) {
                       '&:hover': { color: '#d8b18a' },
                     }}
                   >
-                    +63 (912) 345-6789
+                    0992-850-5785
                   </Typography>
                 </Stack>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                   <EmailOutlinedIcon sx={{ fontSize: 17, color: '#d8b18a', flexShrink: 0 }} />
                   <Typography
                     component="a"
-                    href="mailto:hello@agapecafe.ph"
+                    href="mailto:agapecafecalamba@gmail.com"
                     variant="body2"
                     sx={{
                       color: 'rgba(255,250,244,0.75)',
                       textDecoration: 'none',
                       fontSize: '0.875rem',
+                      minWidth: 0,
+                      overflowWrap: 'anywhere',
                       '&:hover': { color: '#d8b18a' },
                     }}
                   >
-                    hello@agapecafe.ph
+                    agapecafecalamba@gmail.com
                   </Typography>
                 </Stack>
               </Stack>
