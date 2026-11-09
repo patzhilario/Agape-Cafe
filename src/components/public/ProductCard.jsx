@@ -96,15 +96,15 @@ export default function ProductCard({ product }) {
               />
             )}
           </Box>
-          <CardContent sx={{ px: 2.25, pt: 2.25, pb: 1.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <Stack spacing={0.9} sx={{ flex: 1 }}>
+          <CardContent sx={{ px: 2.25, pt: 1.5, pb: 1, '&:last-child': { pb: 1 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <Stack sx={{ flex: 1, gap: 0.75 }}>
               <Typography variant="overline" color="primary" sx={{ letterSpacing: '.12em', lineHeight: 1.4, minHeight: '1.4em', overflowWrap: 'anywhere' }}>
                 {product.category?.name || '\u00a0'}
               </Typography>
-              <Typography variant="h6" component="h3" sx={{ fontWeight: 750, lineHeight: 1.25, minHeight: '2.5em', flex: 1, overflowWrap: 'anywhere' }}>
+              <Typography variant="h6" component="h3" sx={{ fontWeight: 750, lineHeight: 1.25, overflowWrap: 'anywhere' }}>
                 {product.name}
               </Typography>
-              <Typography
+              {product.description && <Typography
                 variant="body2"
                 color="text.secondary"
                 sx={{
@@ -112,13 +112,12 @@ export default function ProductCard({ product }) {
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: 'vertical',
                   overflow: 'hidden',
-                  minHeight: '2.8em',
                   lineHeight: 1.4,
                 }}
               >
-                {product.description || '\u00a0'}
-              </Typography>
-              <Typography variant="body1" color="primary.dark" fontWeight={800} sx={{ pt: 0.25 }}>
+                {product.description}
+              </Typography>}
+              <Typography variant="body1" color="primary.dark" fontWeight={800} sx={{ mt: 'auto', pt: 0.25 }}>
                 {product.variants.length ? `From ${formatPrice(lowestPrice)}` : formatPrice(lowestPrice)}
               </Typography>
             </Stack>
