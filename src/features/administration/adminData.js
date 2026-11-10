@@ -41,8 +41,8 @@ export async function getOrders(branchId, page = 0, pageSize = 50, filters = {})
         )
       )
     `, { count: 'exact' })
-    .order('created_at', { ascending: true })
-    .order('id', { ascending: true })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .range(page * pageSize, (page + 1) * pageSize - 1)
   if (branchId) query = query.eq('branch_id', branchId)
   if (filters.status) query = query.eq('status', filters.status)
@@ -58,7 +58,7 @@ export async function getOrders(branchId, page = 0, pageSize = 50, filters = {})
     payment_proof: relationshipArray(order.payment_proof),
     benefit_request: relationshipArray(order.benefit_request),
   }))
-  // Preserve the database's oldest-first queue across payment and order statuses.
+  // Preserve the database's newest-first order across payment and order statuses.
   return {
     orders,
     count: count ?? 0,

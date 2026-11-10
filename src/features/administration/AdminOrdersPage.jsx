@@ -262,7 +262,7 @@ export default function AdminOrdersPage() {
             record branch payments, or cancel with a reason.
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Oldest orders appear first in every status, based on when the order was placed.
+            Newest orders appear first, based on when the order was placed. Status and payment updates do not change the order.
           </Typography>
         </Box>
         {!account.roles.includes('super_admin') && (
