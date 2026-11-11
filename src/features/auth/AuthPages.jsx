@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Link as RouterLink, Navigate, useSearchParams } from 'react-router-dom'
+import { Link as RouterLink, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Alert,
   Box,
@@ -71,19 +71,22 @@ function getAuthErrorMessage(error) {
 
 function CredentialsPage({ isSignUp = false, isRecovery = false }) {
   const { account, authError, configurationError, isConfigured, isLoading } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const signUpResult = !isSignUp && !isRecovery ? location.state?.signUpResult : null
   const [searchParams] = useSearchParams()
   const [form, setForm] = useState({
     username: '',
     firstName: '',
     lastName: '',
     middleInitial: '',
-    email: '',
+    email: signUpResult?.email || '',
     password: '',
     phone: '',
   })
   const [formError, setFormError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [needsVerification, setNeedsVerification] = useState(false)
+  const [notice, setNotice] = useState(signUpResult?.notice || '')
+  const [needsVerification, setNeedsVerification] = useState(Boolean(signUpResult?.needsVerification))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const requestInFlight = useRef(false)
   const nextPath = searchParams.get('next') || '/'
@@ -166,10 +169,18 @@ function CredentialsPage({ isSignUp = false, isRecovery = false }) {
         if (!data.session) {
           setForm((current) => ({ ...current, password: '' }))
           const canVerify = data.user?.identities?.length !== 0
-          setNeedsVerification(canVerify)
-          setNotice(canVerify
-            ? `Verification requested for ${email}. Check your Inbox and Spam folders.`
-            : 'This email may already be registered. Try logging in or setting your password.')
+          navigate(signInPath, {
+            replace: true,
+            state: {
+              signUpResult: {
+                email,
+                needsVerification: canVerify,
+                notice: canVerify
+                  ? `Verification requested for ${email}. Check your Inbox and Spam folders, then verify your email before logging in.`
+                  : 'This email may already be registered. Try logging in or setting your password.',
+              },
+            },
+          })
         }
       } else {
         if (email.includes('@')) {
@@ -180,8 +191,18 @@ function CredentialsPage({ isSignUp = false, isRecovery = false }) {
           const { data, error } = await supabase.functions.invoke('sign-in-with-username', {
             body: { username: email, password: form.password },
           })
-          if (error || !data?.access_token || !data?.refresh_token) {
-            throw new Error('Could not log in. Check your username and password, and verify your email before logging in.')
+          if (error) {
+            const status = error.context?.status
+            if (status === 429) {
+              throw new Error('Too many login attempts. Please wait before trying again.')
+            }
+            if (status === 400 || status === 401) {
+              throw new Error('Could not log in. Check your username and password, and verify your email before logging in.')
+            }
+            throw new Error('Username login is currently unavailable. Please use your email address to log in.')
+          }
+          if (!data?.access_token || !data?.refresh_token) {
+            throw new Error('Username login is currently unavailable. Please use your email address to log in.')
           }
           const { error: sessionError } = await auth.setSession(data)
           if (sessionError) throw sessionError

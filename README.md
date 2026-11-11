@@ -510,6 +510,9 @@ stored in lowercase. Existing profiles keep their names and can continue
 using email login. Pending staff and admin invitations apply to the invited
 email.
 
+After a successful sign-up awaiting email verification, the app returns to the
+login page with the email prefilled, a verification reminder and a resend option.
+
 Deploy the username login function with
 `supabase functions deploy sign-in-with-username --project-ref <project-ref>`.
 The function uses Supabase's built-in server environment variables
@@ -517,6 +520,14 @@ The function uses Supabase's built-in server environment variables
 Only this server function resolves usernames to email addresses. The browser
 receives session tokens after a successful password check. Email login goes
 directly through Supabase Auth.
+
+Running the SQL setup or deploying the frontend does not deploy Edge Functions.
+If email login works but username login returns `404 NOT_FOUND` / `Requested
+function was not found`, deploy `sign-in-with-username` to the same project as
+`VITE_SUPABASE_URL` using the command above. Keep `verify_jwt = false` for this
+function in `supabase/config.toml`, since login requests have no user session yet.
+The login form reports an unavailable username service separately from invalid
+credentials and allows customers to use their email while deployment is pending.
 
 Apply `20261111030000_customer_profile_settings.sql` to allow customers to
 edit their username and name fields through Account settings. Existing profile
