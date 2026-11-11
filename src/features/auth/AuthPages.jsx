@@ -14,6 +14,7 @@ import {
 } from '@mui/material'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
 import { GoogleOneTap } from './GoogleOneTap.jsx'
+import { PasswordField } from './PasswordField.jsx'
 import { useAuth } from './useAuth.js'
 
 function LoadingState({ label }) {
@@ -378,7 +379,7 @@ function CredentialsPage({ isSignUp = false, isRecovery = false }) {
         required
       />
       {!isRecovery && (
-        <TextField label="Password" name="password" type="password"
+        <PasswordField label="Password" name="password"
           autoComplete={isSignUp ? 'new-password' : 'current-password'}
           value={form.password} onChange={updateField} required
           helperText={isSignUp ? 'Use at least 8 characters.' : undefined}
@@ -475,7 +476,7 @@ export function AuthPasswordUpdatePage() {
           Your password was saved. <RouterLink to="/auth/sign-in">Return to log in</RouterLink>
         </Alert>
       )}
-      <TextField label="New password" type="password" autoComplete="new-password" required
+      <PasswordField label="New password" autoComplete="new-password" required
         helperText="Use at least 8 characters." slotProps={{ htmlInput: { minLength: 8 } }}
         value={password} onChange={(event) => setPassword(event.target.value)} />
       <Button type="submit" variant="contained" disabled={isSaving || isSaved}>Save password</Button>

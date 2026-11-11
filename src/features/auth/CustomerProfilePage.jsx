@@ -11,6 +11,7 @@ import {
   Typography,
 } from '@mui/material'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
+import { PasswordField } from './PasswordField.jsx'
 import { useAuth } from './useAuth.js'
 
 function getProfileForm(account) {
@@ -103,13 +104,13 @@ function PasswordSettings() {
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         {notice && <Alert severity="success">{notice}</Alert>}
         {needsCurrentPassword && (
-          <TextField label="Current password" name="current" type="password" autoComplete="current-password"
+          <PasswordField label="Current password" name="current" autoComplete="current-password"
             value={passwords.current} onChange={updateField} required />
         )}
-        <TextField label="New password" name="next" type="password" autoComplete="new-password"
+        <PasswordField label="New password" name="next" autoComplete="new-password"
           value={passwords.next} onChange={updateField} required
           helperText="Use at least 8 characters." slotProps={{ htmlInput: { minLength: 8 } }} />
-        <TextField label="Confirm new password" name="confirm" type="password" autoComplete="new-password"
+        <PasswordField label="Confirm new password" name="confirm" autoComplete="new-password"
           value={passwords.confirm} onChange={updateField} required />
         {needsVerificationCode && (
           <>
