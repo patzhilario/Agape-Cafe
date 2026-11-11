@@ -1,3 +1,4 @@
+import { formatOrderStatus } from '../features/orders/orderStatus.js'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import {
@@ -42,6 +43,12 @@ export default function OrderHistoryPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    const refresh = () => setReloadKey((key) => key + 1)
+    window.addEventListener('customer-order-update', refresh)
+    return () => window.removeEventListener('customer-order-update', refresh)
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -95,7 +102,6 @@ export default function OrderHistoryPage() {
                     <TableRow>
                       <TableCell>Order</TableCell>
                       <TableCell>Date</TableCell>
-                      <TableCell>Branch</TableCell>
                       <TableCell>Items</TableCell>
                       <TableCell>Status</TableCell>
                       <TableCell>Payment</TableCell>
@@ -112,20 +118,18 @@ export default function OrderHistoryPage() {
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           {formatDate(order.created_at)}
                         </TableCell>
-                        <TableCell>{order.branch?.name || 'Agapé Café'}</TableCell>
                         <TableCell>
                           <Typography variant="body2">
                             {(order.items || []).reduce((sum, item) => sum + item.quantity, 0)} item(s)
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
                             {formatStatus(order.fulfillment_method)}
-                            {order.dining_table?.label ? ` · Table ${order.dining_table.label}` : ''}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <Chip
                             color={order.status === 'cancelled' ? 'error' : order.status === 'completed' ? 'success' : 'primary'}
-                            label={formatStatus(order.status)}
+                            label={formatOrderStatus(order.status)}
                             size="small"
                           />
                         </TableCell>

@@ -1,27 +1,24 @@
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
+import { getStoreBranchId } from '../public/publicData.js'
 
 function relationshipArray(value) {
   if (value == null) return []
   return Array.isArray(value) ? value : [value]
 }
 
-export async function getAdminBranches(account) {
-  const { data, error } = await getSupabaseClient()
-    .from('branches')
-    .select('id, name, is_active')
-    .order('name')
-  if (error) throw new Error(`Could not load branches: ${error.message}`)
-  if (account?.roles.includes('super_admin')) return data
-  const assignedIds = new Set(account?.branchAssignments.map(({ branch_id }) => branch_id) || [])
-  return data.filter((branch) => assignedIds.has(branch.id))
+export async function getAdminBranches() {
+  const { data, error } = await getSupabaseClient().rpc('get_store_branch')
+  if (error) throw new Error(`Could not load store details: ${error.message}`)
+  return data || []
 }
 
 export async function getOrders(branchId, page = 0, pageSize = 50, filters = {}) {
+  branchId = branchId || await getStoreBranchId()
   let query = getSupabaseClient()
     .from('orders')
     .select(`
-      id, order_number, branch_id, customer_name, customer_phone,
-      fulfillment_method, dining_table:branch_dining_tables(label), customer_note, delivery_address, delivery_fee, status, payment_status,
+      id, order_number, order_source, branch_id, customer_name, customer_phone,
+      fulfillment_method, customer_note, delivery_address, delivery_fee, status, payment_status,
       subtotal, discount_total, total, created_at, cancellation_reason,
       branch:branches(name),
       items:order_items(

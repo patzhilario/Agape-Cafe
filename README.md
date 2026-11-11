@@ -1,12 +1,132 @@
-# Agapé Café — multi-branch coffee shop system
+# Agapé Café — single-store coffee shop system
 
 This project is being implemented in the phases below. The current codebase
 includes the Phase 1 foundation, Phase 2 authentication/access controls,
 Phase 3 public site/menu, Phase 4 customer ordering, Phase 5 administration
 and inventory, Phase 6 benefit discount validation, Phase 7 reporting and
-financial monitoring, and Phase 8 checkout payments and branch management.
+financial monitoring, and Phase 8 checkout payments and store settings.
 These workflows require the ordered migrations and configured Supabase
 records; no fake menu, branch, customer, or sales data is used.
+
+## Single-store ordering
+
+Apply `supabase/migrations/20261111040000_single_store_orders.sql` once in
+Supabase SQL Editor after the earlier migrations, then deploy the updated app.
+New installations can run `supabase/AGAPE_CAFE_FULL_SETUP.sql` instead.
+Do not rerun the full setup against an existing database.
+
+The migration selects Calamba as the store and archives other locations,
+including Batangas. Historical orders, payments, inventory and table references
+remain intact. Staff assignments, module permissions and pending Staff invites
+are moved to the store automatically.
+
+Online orders support Dine-in, Pick-up and Delivery. Table numbers are no longer used. Table configuration, branch creation/deletion, branch selectors and the
+Takeout order type are removed. New orders use `create_store_order`, which resolves
+the store in the database and rejects Takeout, other locations and table numbers.
+Store settings retain contact details, accepting-orders status, delivery and
+payment-method/QR configuration. Disposable cups still work as inventory items.
+
+## E-payment only
+
+After the single-store migration, apply
+`supabase/migrations/20261111050000_epayment_only.sql`, then deploy the frontend.
+Cash methods are disabled; past payments remain in order history and reports.
+All new online orders require an active e-payment method
+with a receiving QR and uploaded JPEG receipt. No typed reference is required. Staff review the
+receipt before confirming payment; selecting a method does not charge the customer
+automatically.
+
+In **Store settings > Add payment method**, enter any e-wallet or bank name
+(for example GCash, Maya, MariBank or BDO), optional customer instructions and its
+QR image. No provider credentials are needed for this manual QR receipt workflow.
+
+## Online order types
+
+Apply all migrations in order, including
+`supabase/migrations/20261111080000_restore_online_order_choices.sql` after the
+receipt/notification migration. This latest migration supersedes the earlier
+delivery-only restriction and restores **Dine-in, Pick-up and Delivery**.
+Takeout and table numbers remain disabled. Only Delivery requires a delivery
+address; Dine-in and Pick-up submit no delivery address. All three types still use
+e-payment and JPEG receipts without typed reference numbers. Ready notifications
+say ready to serve, ready for pick-up, or ready for delivery according to the order.
+Historical orders and notifications remain intact.
+
+## JPEG receipts and customer notifications
+
+Apply `supabase/migrations/20261111070000_receipts_and_order_notifications.sql`
+after the earlier migrations, then deploy the updated app. Checkout and receipt
+re-upload accept JPEG (.jpg/.jpeg) only, up to 10 MB. The browser checks the JPEG
+header and storage restricts new files to image/jpeg; the submission RPC verifies
+file ownership, extension and stored MIME type. Historical receipts remain readable.
+Typed reference numbers are removed from the customer form; existing references
+remain attached to past receipts.
+
+Customer accounts show a notification bell and in-app alerts for rejected orders,
+rejected payment receipts, preparing orders and ready orders. Rejection messages
+include the staff reason and link to the order. Notifications are saved in the
+database, scoped to the customer, and remain unread until acknowledged. The app
+checks every 15 seconds while visible and on returning to the tab. These are
+in-app notifications; no browser push or email delivery service is configured.
+Order labels show **Orders preparing** and **Orders Ready**.
+
+## Configurable delivery fee
+
+Apply `supabase/migrations/20261111090000_configurable_delivery_fee.sql` after the
+previous migrations and deploy the frontend. The migration starts the store at
+free delivery. In **Admin > Store settings**, enable **Charge a delivery fee** and
+enter a PHP amount (for example 50), or turn it off for free delivery.
+
+Only Delivery orders receive this fee. Checkout shows it separately and includes
+it in the total; the saved order, payment amount and order receipt retain the same
+fee. Dine-in and Pick-up remain at zero delivery fee. Promotions reduce product
+charges, not the delivery fee. Existing orders keep their original amounts when
+the Admin changes the rate. The server checks the quoted fee, rejects stale quotes
+and serializes retries so the fee is charged once. After a fee change, checkout
+refreshes the rate and asks the customer to review the total/payment before retrying.
+This replaces the earlier separate-booking-fee wording in checkout.
+
+## Staff POS and printable receipts
+
+Apply the POS migrations in order, including
+`supabase/migrations/20261111100000_staff_pos.sql` and then
+`supabase/migrations/20261111110000_pos_counter_checkout.sql`, and deploy the app.
+The latter replaces the earlier upload-and-redirect POS flow.
+
+**Workspace > POS** keeps the entire sale on one screen. The menu shows six items
+per page, with page controls; search/category changes reset to the first page.
+Menu cards constrain long names and categories within their bounds. Tapping a product adds
+its first available variant directly to the basket. **Options** edits size, add-ons
+and flavors inline. Customer name/phone are optional for Dine-in and Pick-up;
+Delivery requires contact details and includes the configured delivery fee.
+
+Staff need **Orders view + create + edit** to take payment. POS supports **Cash**
+with cash received/change, or an enabled **QR method** confirmed by the cashier
+against the store account. POS no longer requires a receipt image upload. Online
+checkout remains e-payment-only and still requires a JPEG payment receipt. A
+private database transaction authorization prevents using POS cash for online
+orders. Completed counter payments are recorded as paid, move the order to
+confirmed, and are audited. Retrying the same request cannot duplicate the sale.
+
+Discounts are applied at the counter. Configured promotions are available except
+those requiring per-customer account limits. PWD/Senior benefits require
+**Promotions approve** permission, the active configured benefit policy, verified
+in-person ID/name, and eligible quantities (at most one drink and one food). The
+server computes discounts from its policy and current prices; discount types
+cannot be stacked. ID details are stored in a restricted verification table.
+Delivery fees are excluded from discounts. Stale totals must be reviewed before
+payment completes.
+
+**Pay & print receipt** opens the browser print dialog after saving payment,
+without navigating away or opening another tab. The receipt preview, reprint,
+80mm/A4 paper controls and **Start next sale** stay inside POS. Cash receipts show
+amount paid, cash received and change; discounted receipts show the reduction.
+Printing can be disabled for a sale via **Print after payment**.
+
+Existing customer/staff order details also offer **Print receipt** through the
+shared `/receipt/:orderId` route. Receipt access follows order RLS. Printed output
+contains only the receipt, with no site navigation or QR code. Match paper size
+in the printer dialog and disable browser headers/footers when needed.
 
 ## Proposed project structure
 
@@ -47,12 +167,12 @@ The first migration creates:
   grants.
 - `is_active_account`, `has_role`, `can_access_branch`, and `has_permission`
   database helpers, plus initial row-level security policies.
-- A Super Admin-only access management RPC that atomically updates roles,
+- An Admin-only access management RPC that atomically updates roles,
   branch assignments, and module permissions while recording an audit event.
 
 All exposed tables have RLS enabled. Role grants cannot be created by ordinary
-users; only a database operator or a trusted Super Admin operation can grant
-administrative roles. The initial Super Admin must be provisioned by a trusted
+users; only a database operator or a trusted Admin operation can grant
+administrative roles. The initial Admin must be provisioned by a trusted
 operator after that person signs up. Public visitors can read active branch
 details only. The browser will use only the Supabase publishable/anon key;
 privileged keys must never be put in `VITE_*` variables.
@@ -72,7 +192,7 @@ reports and exports, expense records, and estimated profit monitoring.
    shared layout, and initial database/RLS migration. Complete.
 2. **Authentication and permissions** — Google OAuth, callback/session
    handling, profile lifecycle, role and branch permission workflows.
-   Implemented; a live Supabase project and Google OAuth credentials are still
+   Implemented; a live Supabase project and authentication configuration are still
    required to exercise sign-in.
 3. **Public site and menu** — database-backed landing page, searchable and
    category/branch-filtered product catalog, product details, promotions,
@@ -87,7 +207,7 @@ reports and exports, expense records, and estimated profit monitoring.
    and configured menu/ingredient records.
 6. **PWD and Senior Citizen validation** — private uploads, item-specific
    requests, staff verification, configurable policy, and audited decisions.
-   Implemented; requires the Phase 6 migration and Super Admin VAT-policy setup.
+   Implemented; requires the Phase 6 migration and Admin VAT-policy setup.
 7. **Reporting and financial monitoring** — order exports, operating
    expenses, and cost-aware profit estimates. Implemented; requires the
    Phase 7 migration and branch reports/financials permissions.
@@ -177,7 +297,7 @@ financial reporting. Reports show collected payments separately from completed
 sales. Migration 17 adds costed manual usage and restock-purchase totals;
 purchase spending is shown separately from usage cost to avoid double-counting.
 Recorded branch expenses are also included in financial summaries.
-Migration 16 allows Super Admins to permanently delete an inventory item
+Migration 16 allows Admins to permanently delete an inventory item
 together with its branch stock, recipes, and movement history. Such a deletion
 is recorded in the audit log, but removes that item's ingredient costs from
 historical financial estimates.
@@ -202,20 +322,20 @@ promotion totals; checkout continues requiring a size whenever the catalog
 defines active sizes, even if every size is disabled for a branch.
 
 Migration 21 repairs ambiguous add-on references in checkout. Migration 22
-lets Super Admins add an account by email, name, and role before registration.
+lets Admins add an account by email, name, and role before registration.
 For a new account, the selected role and any branch permissions are applied
-when the user first signs in with that same Google email; an existing account
+when the user signs up with the invited email; an existing account
 is updated immediately. Apply migration 21 and then migration 22 to an
 existing project that has applied migration 20, or apply migration 22 if
-migration 21 is already installed. The initial `SUPER_ADMIN_EMAIL` setting is
-still only for provisioning the first Super Admin.
+migration 21 is already installed. The initial `ADMIN_EMAIL` setting is
+for provisioning the first Admin.
 
 Migration 23 adds an audited manual override for recording GCash payments
 verified outside the submitted-proof workflow; staff must enter a reason.
 Apply it after migrations 21 and 22 on an existing project.
 
 Migration 24 adds an optional Google Maps share link to each branch. Apply it
-after migration 23 on an existing project so branch admins can save map links
+after migration 23 on an existing project so Staff can save map links
 and visitors can open an embedded branch map.
 
 Migration 25 fixes public reads of branch-specific menu size and add-on
@@ -238,7 +358,7 @@ the order creation date, matching Product Sales. The payment update timestamp
 remains available separately in transaction details. Apply it after migration
 28 on existing projects.
 
-Migration 30 makes payment methods branch-specific. Super Admins can enable,
+Migration 30 makes payment methods branch-specific. Admins can enable,
 deactivate, or add cash and online QR methods for each branch. Customers can
 choose any enabled online QR method for delivery; submitted receipts still
 require staff review. Apply it after migration 29 on existing projects.
@@ -257,7 +377,7 @@ Migration 32 adds drink serving type to order items and deducts takeout cups
 from branch inventory when an order is completed. Apply it after migration 31
 on existing projects; order screens require this column to load.
 
-Migration 33 adds Super Admin account deletion. Accounts linked to retained
+Migration 33 adds Admin account deletion. Accounts linked to retained
 order or financial records can still be permanently deleted; their profile
 links are cleared while the business history is retained. Apply it after
 migration 32 on existing projects.
@@ -269,6 +389,12 @@ column. In the catalog editor, use **Add flavor** and leave the price blank
 for no extra charge. Paid flavors use the existing add-on checkout pricing,
 branch overrides, inventory recipes, and saved order details. Drink variants
 are labeled Size; food variants are labeled Meal set.
+
+Apply `20261111000000_simplify_account_roles.sql` after the November 9
+dining-table migration and before deploying the updated frontend. Account roles
+are Admin, Staff, and Customer. Existing Super Admin accounts become Admin and
+Branch Admin accounts become Staff. The migration also converts pending invites
+and preserves branch assignments and permissions.
 
 The foundation migration also creates customer profiles and roles for any
 Supabase Auth users that already exist when the schema is installed. If the
@@ -282,15 +408,13 @@ has_role` while loading public products or promotions, run
 foundation migration in the combined setup grants this function to the
 anonymous database role so public read policies can evaluate it safely.
 
-Set `SUPER_ADMIN_EMAIL` in `.env` to the Google email that will receive initial
-Super Admin access. Copy the same email into `target_email` in
-`supabase/provision_initial_super_admin.sql` and run that file once in the
+Set `ADMIN_EMAIL` in `.env` to the email that will receive initial
+Admin access. Copy the same email into `target_email` in
+`supabase/provision_initial_admin.sql` and run that file once in the
 Supabase SQL Editor; the user does not need to exist or have signed in yet.
-The script saves the email and updates the Auth trigger so that the first
-matching Google sign-in creates the profile with the Super Admin role. If the
-account already exists, the script grants the role immediately. No
+The script saves a pending invite so that signing up with the invited email creates the profile with the Admin role. If the account already exists, the script grants the role immediately. No
 service-role key is needed in the app or `.env`. The combined full setup
-contains only the schema migrations and does not assign a Super Admin.
+contains only the schema migrations and does not assign an Admin.
 
 The migrations have not been applied to a live project in this workspace.
 Checkout requires published products, active branches, and branch product
@@ -301,11 +425,11 @@ Restocks record their total purchase cost; usage records use the latest
 available receipt cost for estimated COGS. Set a low-stock threshold per item
 and branch to enable warnings. Orders do not change ingredient inventory.
 Units are labels only; the app does not convert between units.
-Super Admins can rename items, archive items to hide them from new stock
+Admins can rename items, archive items to hide them from new stock
 updates while preserving history, or permanently delete items with linked
 history. Units cannot be changed after an item is used in stock.
 Customers can choose pick-up or delivery: pick-up supports cash or
-GCash, while delivery requires GCash. Super Admins
+GCash, while delivery requires GCash. Admins
 configure a public GCash QR image per branch; GCash checkout requires a
 reference number and a private receipt upload unless a benefit discount is
 pending verification. In that case the customer submits the order first and
@@ -317,7 +441,7 @@ by the customer to the delivery service and is not included in the café order
 total.
 
 Phase 6 defaults the benefit percentage to 20%, but approvals are blocked
-until a Super Admin selects the business VAT-registration status. Approval
+until an Admin selects the business VAT-registration status. Approval
 applies the configured percentage to selected item quantities and removes the
 configured VAT component for VAT-registered businesses. Promotions and
 statutory benefit discounts cannot be stacked. Review current tax and
@@ -356,12 +480,56 @@ benefit-ID evidence remains at its original image quality (up to 10 MB) to
 preserve legibility; the app does not currently offer customer profile-photo
 uploads.
 
-For Google sign-in, enable the Google provider in Supabase Auth, configure its
-OAuth client credentials in the Supabase dashboard, and allow the callback URL
-shown by Supabase (`https://<project-ref>.supabase.co/auth/v1/callback`). Add
-local and production app URLs to Supabase Auth's redirect URL allowlist; the
-app redirects to `/auth/callback`. Provision the first `super_admin` role
-using the Supabase SQL editor after that administrator signs in once.
+### Sign-up and login
+
+Apply `20261111010000_email_password_signup.sql` after the role migration.
+Then apply `20261111020000_signup_identity_fields.sql`. The Sign Up button
+opens a form requiring a unique username, first name, last name, email,
+password, and phone number. MI is optional. Usernames use 3 to 30 letters,
+numbers, periods, or underscores, starting with a letter or number, and are
+stored in lowercase. Existing profiles keep their names and can continue
+using email login. Pending staff and admin invitations apply to the invited
+email.
+
+Deploy the username login function with
+`supabase functions deploy sign-in-with-username --project-ref <project-ref>`.
+The function uses Supabase's built-in server environment variables
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
+Only this server function resolves usernames to email addresses. The browser
+receives session tokens after a successful password check. Email login goes
+directly through Supabase Auth.
+
+Apply `20261111030000_customer_profile_settings.sql` to allow customers to
+edit their username and name fields through Account settings. Existing profile
+RLS still limits account access. Settings include phone, delivery address,
+email verification status, and a password change form with confirmation.
+Supabase can request the current password or a reauthentication email code
+according to its configured password security policy. Users can also open
+the existing email password-reset flow from this page.
+
+The database blocks creation of Google-only accounts. Verification links are
+sent to the registered email address, including Gmail inboxes.
+
+In Supabase Auth, enable the Email provider, allow new sign-ups, and keep
+**Confirm email** enabled so account holders verify ownership before signing
+in. Set the minimum password length to at least 8 characters. Configure
+custom SMTP for confirmation and password recovery messages to customer
+addresses, with a sender address owned by the caf?. Allow
+`/auth/callback` and `/auth/update-password` on each app origin in the Auth
+redirect URL allowlist, including their `next` query parameter.
+
+For Google One Tap, enable the Google provider in Supabase, add each app
+origin to the Google OAuth web client's authorized JavaScript origins, and
+set that same web client ID in the Supabase Google provider and as
+`VITE_GOOGLE_CLIENT_ID` in local and deployment environments. In Google Cloud,
+open the matching OAuth web client and add `http://localhost` and the local
+app origin (for example `http://localhost:5173`) to **Authorized JavaScript
+origins**. Add the deployed app origin there as well. Use the scheme, hostname,
+and actual port without a page path. If the console reports that the origin
+is not allowed, compare these entries with `window.location.origin`. Google on the sign-up page fills first name, last name, and email. Google on the
+login page signs in an existing account with a matching verified email.
+Existing Google-only users can use **Set or reset password** to add a password
+to the same account.
 
 ## Vercel deployment
 
@@ -381,14 +549,8 @@ after changing environment variables.
 
 ## Current limitations
 
-- The public landing page, menu, product detail, branch, about, and contact
-  pages are implemented, but menu and branch data will remain empty until
-  published Supabase records exist.
-- The order, administration, benefit discount, reporting, checkout-payment,
-  and branch-management migrations have not been exercised against a live
-  Supabase/PostgreSQL project. Apply and validate all seventeen migrations,
-  assign branch permissions, and configure real menu, stock, branch QR codes,
-  and inventory purchase costs before recording usage.
-- Google sign-in and deployment still require their configuration and
-  remaining planned work.
-- Deployment remains future work.
+- Live email, Google sign-in and payment QR setup require the configured Supabase
+  project and provider credentials.
+- Single-store migrations and order rules have been checked locally. Apply the
+  migration to the live project and deploy the frontend together before use.
+- Published menu, stock and payment-method records are required for checkout.

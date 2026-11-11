@@ -1,3 +1,5 @@
+import PointOfSaleOutlinedIcon from '@mui/icons-material/PointOfSaleOutlined'
+import { getStoreBranchId } from '../public/publicData.js'
 import { lazy, useEffect, useRef, useState } from 'react'
 import {
   Alert,
@@ -41,9 +43,10 @@ import { useAuth } from './useAuth.js'
 import logo from '../../assets/logo.jpg'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
 
+const StaffPOSPage = lazy(() => import('../administration/StaffPOSPage.jsx'))
 const AccessManagementPage = lazy(() => import('./AccessManagementPage.jsx'))
 const AdminAuditPage = lazy(() => import('./AdminAuditPage.jsx'))
-const AdminBranchesPage = lazy(() => import('../administration/AdminBranchesPage.jsx'))
+const AdminStoreSettingsPage = lazy(() => import('../administration/AdminStoreSettingsPage.jsx'))
 const AdminInventoryPage = lazy(() => import('../administration/AdminInventoryPage.jsx'))
 const AdminMenuPage = lazy(() => import('../administration/AdminMenuPage.jsx'))
 const AdminOrdersPage = lazy(() => import('../administration/AdminOrdersPage.jsx'))
@@ -92,8 +95,8 @@ export function AdminArea() {
   const [signOutError, setSignOutError] = useState('')
   const [openOrdersCount, setOpenOrdersCount] = useState(0)
   const mobileMenuButtonRef = useRef(null)
-  const isSuperAdmin = account.roles.includes('super_admin')
-  const canViewOrders = isSuperAdmin || hasPermission('orders', 'view')
+  const isAdmin = account.roles.includes('admin')
+  const canViewOrders = isAdmin || hasPermission('orders', 'view')
   const googleAvatarUrl =
     account.google_avatar_url ||
     session?.user?.user_metadata?.avatar_url ||
@@ -107,31 +110,31 @@ export function AdminArea() {
   const roleLabels = {
     customer: 'Customer',
     staff: 'Staff',
-    branch_admin: 'Branch admin',
-    super_admin: 'Super Admin',
+    admin: 'Admin',
   }
-  const accountRole = isSuperAdmin
-    ? 'Super Admin'
+  const accountRole = isAdmin
+    ? 'Admin'
     : account.roles.map((role) => roleLabels[role] || role).join(', ')
   const sections = [
     { path: '', module: '', label: 'Overview', icon: DashboardIcon, group: 'Workspace' },
     { path: 'orders', module: 'orders', label: 'Orders', icon: ReceiptLongIcon, group: 'Daily operations' },
+    ...((isAdmin || (hasPermission('orders', 'view') && hasPermission('orders', 'create'))) ? [{ path: 'pos', module: 'orders', label: 'POS', icon: PointOfSaleOutlinedIcon, group: 'Daily operations' }] : []),
     { path: 'menu', module: 'menu', label: 'Menu', icon: MenuBookIcon, group: 'Menu and stock' },
     { path: 'inventory', module: 'inventory', label: 'Inventory', icon: Inventory2Icon, group: 'Menu and stock' },
-    ...(isSuperAdmin ? [{ path: 'promotions', module: 'promotions', label: 'Promotions', icon: CampaignIcon, group: 'Sales and benefits' }] : []),
-    ...(isSuperAdmin ? [{ path: 'benefit-policy', module: 'promotions', label: 'Benefit policy', icon: DiscountIcon, group: 'Sales and benefits' }] : []),
+    ...(isAdmin ? [{ path: 'promotions', module: 'promotions', label: 'Promotions', icon: CampaignIcon, group: 'Sales and benefits' }] : []),
+    ...(isAdmin ? [{ path: 'benefit-policy', module: 'promotions', label: 'Benefit policy', icon: DiscountIcon, group: 'Sales and benefits' }] : []),
     { path: 'reports', module: 'reports', label: 'Reports', icon: AssessmentIcon, group: 'Performance' },
     { path: 'financials', module: 'financials', label: 'Financials', icon: PaymentsIcon, group: 'Performance' },
-    ...(isSuperAdmin ? [
+    ...(isAdmin ? [
       { path: 'permissions', module: 'staff', label: 'Account management', icon: AdminPanelSettingsIcon, group: 'Administration' },
       { path: 'audit', module: '', label: 'Audit trail', icon: HistoryIcon, group: 'Administration' },
-      { path: 'branches', module: '', label: 'Branches', icon: Inventory2Icon, group: 'Administration' },
+      { path: 'settings', module: '', label: 'Store settings', icon: Inventory2Icon, group: 'Administration' },
     ] : []),
   ]
   const sectionPath = location.pathname.replace(/^\/admin\/?/, '').split('/')[0]
   const currentSection = sections.find((section) => section.path === sectionPath)
   const visibleSections = sections.filter(
-    (section) => !section.module || isSuperAdmin || hasPermission(section.module, 'view'),
+    (section) => !section.module || isAdmin || hasPermission(section.module, 'view'),
   )
   const navigationGroups = [...new Set(visibleSections.map((section) => section.group))]
   useEffect(() => {
@@ -144,6 +147,7 @@ export function AdminArea() {
           .from('orders')
           .select('id', { count: 'exact', head: true })
           .in('status', ['pending', 'confirmed', 'preparing', 'ready'])
+          .eq('branch_id', await getStoreBranchId())
         if (error) throw new Error(error.message)
         if (active) setOpenOrdersCount(count || 0)
       } catch (error) {
@@ -166,20 +170,22 @@ export function AdminArea() {
     }
   }, [canViewOrders])
   const isDeniedRoute = (sectionPath && !currentSection) ||
-    (sectionPath === 'permissions' && !isSuperAdmin) ||
-    (currentSection?.module && !hasPermission(currentSection.module, 'view') && !isSuperAdmin)
+    (sectionPath === 'permissions' && !isAdmin) ||
+    (currentSection?.module && !hasPermission(currentSection.module, 'view') && !isAdmin)
 
   let pageContent
-  if (isDeniedRoute) pageContent = <AccessDenied to="/admin" />
+  if (sectionPath === 'branches' && isAdmin) pageContent = <Navigate to="/admin/settings" replace />
+  else if (isDeniedRoute) pageContent = <AccessDenied to="/admin" />
   else if (sectionPath === 'permissions') pageContent = <AccessManagementPage />
   else if (sectionPath === 'audit') pageContent = <AdminAuditPage />
-  else if (sectionPath === 'branches' && isSuperAdmin) pageContent = <AdminBranchesPage />
-  else if (sectionPath === 'branches') pageContent = <AccessDenied to="/admin" />
+  else if (sectionPath === 'settings' && isAdmin) pageContent = <AdminStoreSettingsPage />
+  else if (sectionPath === 'settings') pageContent = <AccessDenied to="/admin" />
+  else if (sectionPath === 'pos') pageContent = <StaffPOSPage />
   else if (sectionPath === 'orders') pageContent = <AdminOrdersPage />
   else if (sectionPath === 'menu') pageContent = <AdminMenuPage />
   else if (sectionPath === 'inventory') pageContent = <AdminInventoryPage />
-  else if (sectionPath === 'promotions' && isSuperAdmin) pageContent = <AdminPromotionsPage />
-  else if (sectionPath === 'benefit-policy' && isSuperAdmin) pageContent = <AdminBenefitPolicyPage />
+  else if (sectionPath === 'promotions' && isAdmin) pageContent = <AdminPromotionsPage />
+  else if (sectionPath === 'benefit-policy' && isAdmin) pageContent = <AdminBenefitPolicyPage />
   else if (sectionPath === 'reports') pageContent = <AdminReportsPage />
   else if (sectionPath === 'financials') pageContent = <AdminFinancialsPage />
   else {
@@ -188,20 +194,12 @@ export function AdminArea() {
         <Stack spacing={3}>
           <Box>
             <Typography variant="overline" color="primary">Agapé Café · Administration</Typography>
-            <Typography variant="h2">Admin workspace</Typography>
+            <Typography variant="h2">Workspace</Typography>
             <Typography color="text.secondary">
               Welcome, {account.display_name || account.email}. Choose a workspace
-              below to manage your branch operations.
+              below to manage your store operations.
             </Typography>
           </Box>
-          <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 } }}>
-            <Typography variant="subtitle2" color="text.secondary">Assigned branches</Typography>
-            <Typography sx={{ mt: 0.5, lineHeight: 1.6 }}>
-              {account.branchAssignments.length
-                ? account.branchAssignments.map((assignment) => assignment.branch?.name || assignment.branch_id).join(', ')
-                : isSuperAdmin ? 'All branches' : 'No branch assigned — contact a Super Admin.'}
-            </Typography>
-          </Paper>
           <Box>
           <Typography variant="h6" gutterBottom>Available workspaces</Typography>
           <Stack spacing={3}>
@@ -260,7 +258,7 @@ export function AdminArea() {
             })}
           </Stack>
             {!visibleSections.some((section) => section.path) && (
-              <Alert severity="info">No workspaces are assigned yet. Contact a Super Admin to get branch access.</Alert>
+              <Alert severity="info">No workspaces are assigned yet. Contact an Admin to get module access.</Alert>
             )}
           </Box>
         </Stack>
@@ -299,7 +297,7 @@ export function AdminArea() {
             }}
           />
         </Box>
-        <Typography variant="body2" color="text.secondary">Admin workspace</Typography>
+        <Typography variant="body2" color="text.secondary">Workspace</Typography>
       </Box>
       <Divider />
       <Box sx={{ px: 2, py: 1.75 }}>
@@ -471,7 +469,7 @@ export function CustomerArea() {
             Order history
           </Button>
           <Button component={RouterLink} to="/customer/profile" variant="outlined">
-            My profile
+            Account settings
           </Button>
           <Button component={RouterLink} to="/menu" variant="outlined">
             Browse menu
@@ -486,10 +484,10 @@ export function AccessDenied({ to = '/' }) {
   return (
     <Container maxWidth="sm" sx={{ py: 8 }}>
       <Alert severity="warning" sx={{ mb: 3 }}>
-        You do not have permission to access this page or branch.
+        You do not have permission to access this page.
       </Alert>
       <Button component={RouterLink} to={to} variant="contained">
-        {to === '/admin' ? 'Return to admin workspace' : 'Return home'}
+        {to === '/admin' ? 'Return to workspace' : 'Return home'}
       </Button>
     </Container>
   )

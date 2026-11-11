@@ -3,17 +3,24 @@ import { Link as RouterLink, Navigate, Outlet, Route, Routes, useLocation, useNa
 import { Box, Button, CircularProgress, Container, Drawer, IconButton, Stack, Typography } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import AppShell from '../components/AppShell.jsx'
-import { AuthCallbackPage, AuthErrorPage, AuthPage } from '../features/auth/AuthPages.jsx'
 import { ADMIN_ROLES } from '../features/auth/authConstants.js'
 import { AdminArea, CustomerArea, RequireAuth } from '../features/auth/RouteGuards.jsx'
+
+const AuthPage = lazy(() => import('../features/auth/AuthPages.jsx').then((module) => ({ default: module.AuthPage })))
+const AuthSignUpPage = lazy(() => import('../features/auth/AuthPages.jsx').then((module) => ({ default: module.AuthSignUpPage })))
+const AuthCallbackPage = lazy(() => import('../features/auth/AuthPages.jsx').then((module) => ({ default: module.AuthCallbackPage })))
+const AuthErrorPage = lazy(() => import('../features/auth/AuthPages.jsx').then((module) => ({ default: module.AuthErrorPage })))
+const AuthPasswordRequestPage = lazy(() => import('../features/auth/AuthPages.jsx').then((module) => ({ default: module.AuthPasswordRequestPage })))
+const AuthPasswordUpdatePage = lazy(() => import('../features/auth/AuthPages.jsx').then((module) => ({ default: module.AuthPasswordUpdatePage })))
 
 const HomePage = lazy(() => import('../pages/HomePage.jsx'))
 const MenuPage = lazy(() => import('../pages/MenuPage.jsx'))
 const ProductPage = lazy(() => import('../pages/ProductPage.jsx'))
-const BranchesPage = lazy(() => import('../pages/BranchesPage.jsx'))
+const StorePage = lazy(() => import('../pages/StorePage.jsx'))
 const AboutPage = lazy(() => import('../pages/AboutPage.jsx'))
 const CheckoutPage = lazy(() => import('../pages/CheckoutPage.jsx'))
 const OrderHistoryPage = lazy(() => import('../pages/OrderHistoryPage.jsx'))
+const OrderReceiptPage = lazy(() => import('../pages/OrderReceiptPage.jsx'))
 const OrderDetailPage = lazy(() => import('../pages/OrderDetailPage.jsx'))
 const CustomerProfilePage = lazy(() => import('../features/auth/CustomerProfilePage.jsx'))
 
@@ -134,12 +141,14 @@ export default function AppRouter() {
         }
       >
         <Routes location={showCheckoutDrawer ? backgroundLocation : location}>
+          <Route path="/receipt/:orderId" element={<RequireAuth><OrderReceiptPage /></RequireAuth>} />
           <Route path="/" element={<HomePage />} />
           <Route path="/menu" element={<MenuPage />} />
           <Route path="/menu/:productId" element={<ProductPage />} />
-          <Route path="/branches" element={<BranchesPage />} />
+          <Route path="/visit" element={<StorePage />} />
+          <Route path="/branches" element={<Navigate to="/visit" replace />} />
           <Route path="/about" element={<AboutPage />} />
-          <Route path="/contact" element={<Navigate to="/branches" replace />} />
+          <Route path="/contact" element={<Navigate to="/visit" replace />} />
           <Route
             path="/cart"
             element={<Navigate to="/menu" replace state={{ openCart: true }} />}
@@ -148,6 +157,9 @@ export default function AppRouter() {
             <Route key={path} path={path} element={<PlannedPage path={path} />} />
           ))}
           <Route path="/auth/sign-in" element={<AuthPage />} />
+          <Route path="/auth/sign-up" element={<AuthSignUpPage />} />
+          <Route path="/auth/forgot-password" element={<AuthPasswordRequestPage />} />
+          <Route path="/auth/update-password" element={<AuthPasswordUpdatePage />} />
           <Route path="/auth/callback" element={<AuthCallbackPage />} />
           <Route path="/auth/error" element={<AuthErrorPage />} />
           <Route
@@ -172,7 +184,7 @@ export default function AppRouter() {
                   fallback={
                     <Stack sx={{ alignItems: 'center', py: 10 }}>
                       <CircularProgress />
-                      <Typography color="text.secondary">Loading admin workspace…</Typography>
+                      <Typography color="text.secondary">Loading workspace…</Typography>
                     </Stack>
                   }
                 >

@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
+import { getStoreBranchId } from '../public/publicData.js'
 
 function unwrap({ data, error }, action) {
   if (error) throw new Error(`${action}: ${error.message}`)
@@ -67,6 +68,7 @@ export async function getCustomerBenefitRequest(orderId) {
 }
 
 export async function getApproverBenefitRequests(branchId, page = 0, pageSize = 25) {
+  branchId = branchId || await getStoreBranchId()
   let query = getSupabaseClient()
     .from('benefit_discount_requests')
     .select(`

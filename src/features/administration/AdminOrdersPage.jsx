@@ -1,3 +1,5 @@
+import { Link as RouterLink } from 'react-router-dom'
+import { formatOrderStatus } from '../orders/orderStatus.js'
 import { useCallback, useEffect, useState } from 'react'
 import {
   Alert,
@@ -64,10 +66,9 @@ function getDocumentType(path) {
 
 export default function AdminOrdersPage() {
   const { account, hasPermission } = useAuth()
-  const canEditOrders = account.roles.includes('super_admin') || hasPermission('orders', 'edit')
-  const canCancelOrders = account.roles.includes('super_admin') || hasPermission('orders', 'cancel')
-  const canApproveBenefits = account.roles.includes('super_admin') || hasPermission('promotions', 'approve')
-  const [branches, setBranches] = useState([])
+  const canEditOrders = account.roles.includes('admin') || hasPermission('orders', 'edit')
+  const canCancelOrders = account.roles.includes('admin') || hasPermission('orders', 'cancel')
+  const canApproveBenefits = account.roles.includes('admin') || hasPermission('promotions', 'approve')
   const [branchId, setBranchId] = useState('')
   const [orders, setOrders] = useState([])
   const [totalOrderCount, setTotalOrderCount] = useState(0)
@@ -100,11 +101,8 @@ export default function AdminOrdersPage() {
     getAdminBranches(account)
       .then((data) => {
         if (!active) return
-        setBranches(data)
-        const assignedBranch = account.branchAssignments[0]?.branch_id
-        setBranchId((current) =>
-          current || (account.roles.includes('super_admin') ? '' : assignedBranch || ''),
-        )
+
+        setBranchId(data[0]?.id || '')
       })
       .catch((error) => {
         console.error('Unable to load branches for order management.', error)
@@ -234,7 +232,7 @@ export default function AdminOrdersPage() {
           return
         }
         await updateOrderStatus(order.id, action, reason)
-        setSuccessMessage(`${order.order_number} updated to ${label(action)}.`)
+        setSuccessMessage(`${order.order_number} updated to ${formatOrderStatus(action)}.`)
         setOrders((current) => current.map((item) => (
           item.id === order.id ? {
             ...item,
@@ -259,30 +257,13 @@ export default function AdminOrdersPage() {
           <Typography variant="h2">Order management</Typography>
           <Typography color="text.secondary">
             Review orders visible to your assigned branches, advance fulfillment,
-            record branch payments, or cancel with a reason.
+            verify e-payments, or reject an order with a reason.
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Newest orders appear first, based on when the order was placed. Status and payment updates do not change the order.
           </Typography>
         </Box>
-        {!account.roles.includes('super_admin') && (
-          <FormControl fullWidth>
-            <InputLabel id="orders-branch-label">Branch</InputLabel>
-            <Select
-              labelId="orders-branch-label"
-              label="Branch"
-              value={branchId}
-              onChange={(event) => {
-                setPage(0)
-                setBranchId(event.target.value)
-              }}
-            >
-              {branches.map((branch) => (
-                <MenuItem key={branch.id} value={branch.id}>{branch.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
+
         <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 } }}>
           <Stack spacing={1.5}>
             <Typography variant="subtitle2" color="text.secondary">FILTER ORDERS</Typography>
@@ -310,7 +291,7 @@ export default function AdminOrdersPage() {
                 >
                   <MenuItem value="">All statuses</MenuItem>
                   {['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'].map((status) => (
-                    <MenuItem key={status} value={status}>{label(status)}</MenuItem>
+                    <MenuItem key={status} value={status}>{formatOrderStatus(status)}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -328,23 +309,6 @@ export default function AdminOrdersPage() {
                   <MenuItem value="">All payments</MenuItem>
                   {['unpaid', 'pending', 'paid', 'failed', 'refunded', 'partially_refunded'].map((status) => (
                     <MenuItem key={status} value={status}>{label(status)}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl size="small">
-                <InputLabel id="orders-type-filter-label">Order type</InputLabel>
-                <Select
-                  labelId="orders-type-filter-label"
-                  label="Order type"
-                  value={orderFilters.fulfillmentMethod}
-                  onChange={(event) => {
-                    setPage(0)
-                    setOrderFilters((current) => ({ ...current, fulfillmentMethod: event.target.value }))
-                  }}
-                >
-                  <MenuItem value="">All types</MenuItem>
-                  {['dine_in', 'pickup', 'takeout', 'delivery'].map((method) => (
-                    <MenuItem key={method} value={method}>{label(method)}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -396,18 +360,17 @@ export default function AdminOrdersPage() {
         {isLoading ? (
           <Stack sx={{ alignItems: 'center', py: 8 }}><CircularProgress /></Stack>
         ) : !orders.length && page === 0 ? (
-          <Alert severity="info">No orders are available for this branch.</Alert>
+          <Alert severity="info">No orders are available for the store.</Alert>
         ) : (
           <>
           <TableContainer component={Paper} variant="outlined">
-            <Table size="small" aria-label="Branch orders" sx={{ minWidth: 920 }}>
+            <Table size="small" aria-label="Orders" sx={{ minWidth: 920 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Order</TableCell>
                   <TableCell>Date</TableCell>
                   <TableCell>Customer</TableCell>
-                  <TableCell>Branch</TableCell>
-                  <TableCell>Type / table</TableCell>
+                  <TableCell>Order type</TableCell>
                   <TableCell align="right">Total</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Payment</TableCell>
@@ -417,7 +380,7 @@ export default function AdminOrdersPage() {
               <TableBody>
                 {orders.map((order) => (
                   <TableRow key={order.id} hover>
-                    <TableCell sx={{ fontWeight: 700 }}>{order.order_number}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{order.order_number}{order.order_source === 'pos' && <Chip label="POS" size="small" sx={{ ml: 1 }} />}</TableCell>
                     <TableCell>
                       {new Intl.DateTimeFormat('en-PH', {
                         dateStyle: 'medium',
@@ -425,16 +388,14 @@ export default function AdminOrdersPage() {
                       }).format(new Date(order.created_at))}
                     </TableCell>
                     <TableCell>{order.customer_name}</TableCell>
-                    <TableCell>{order.branch?.name || 'Branch'}</TableCell>
                     <TableCell>
                       {label(order.fulfillment_method)}
-                      {order.dining_table?.label ? ` · ${order.dining_table.label}` : ''}
                     </TableCell>
                     <TableCell align="right">{formatPrice(order.total)}</TableCell>
                     <TableCell>
                       <Chip
                         color={order.status === 'cancelled' ? 'error' : order.status === 'completed' ? 'success' : 'primary'}
-                        label={label(order.status)}
+                        label={formatOrderStatus(order.status)}
                         size="small"
                       />
                     </TableCell>
@@ -467,6 +428,7 @@ export default function AdminOrdersPage() {
               Order details{selectedOrder ? ` · ${selectedOrder.order_number}` : ''}
             </DialogTitle>
             <DialogContent dividers sx={{ maxHeight: '75vh' }}>
+              {selectedOrder && <Button component={RouterLink} to={`/receipt/${selectedOrder.id}`} target="_blank" rel="noopener noreferrer" variant="outlined" sx={{ mb: 2 }}>Print receipt</Button>}
         {orders.map((order) => {
           if (order.id !== selectedOrderId) return null
           const payment = Array.isArray(order.payment) ? order.payment[0] : order.payment
@@ -499,7 +461,7 @@ export default function AdminOrdersPage() {
                     >
                       <Chip
                         color={order.status === 'cancelled' ? 'error' : order.status === 'completed' ? 'success' : 'primary'}
-                        label={label(order.status)}
+                        label={formatOrderStatus(order.status)}
                         size="small"
                       />
                       <Chip
@@ -532,11 +494,9 @@ export default function AdminOrdersPage() {
                       <Typography variant="body2" color="text.secondary">{order.customer_phone}</Typography>
                     </Box>
                     <Box>
-                      <Typography variant="caption" color="text.secondary">BRANCH & FULFILLMENT</Typography>
-                      <Typography fontWeight={700}>{order.branch?.name || 'Branch'}</Typography>
+                      <Typography variant="caption" color="text.secondary">FULFILLMENT</Typography>
                       <Typography variant="body2" color="text.secondary">
                         {label(order.fulfillment_method)}
-                        {order.dining_table?.label ? ` · Table ${order.dining_table.label}` : ''}
                         {order.fulfillment_method === 'delivery' && order.delivery_address
                           ? ` · ${order.delivery_address}`
                           : ''}
@@ -571,7 +531,7 @@ export default function AdminOrdersPage() {
                                 size="small"
                                 variant="outlined"
                                 color={item.serving_type === 'cup' ? 'warning' : 'primary'}
-                                label={item.serving_type === 'cup' ? 'Takeout Cup' : 'Glass'}
+                                label={item.serving_type === 'cup' ? 'Cup' : 'Glass'}
                                 sx={{ ml: 1, height: 20, fontSize: '0.72rem' }}
                               />
                             )}
@@ -588,10 +548,10 @@ export default function AdminOrdersPage() {
                       </Stack>
                     ))}
                   </Stack>
-                  {order.fulfillment_method === 'delivery' && Number(order.delivery_fee) > 0 && (
+                  {order.fulfillment_method === 'delivery' && (
                     <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
                       <Typography variant="body2" color="text.secondary">Delivery fee</Typography>
-                      <Typography variant="body2">{formatPrice(order.delivery_fee)}</Typography>
+                      <Typography variant="body2">{Number(order.delivery_fee) > 0 ? formatPrice(order.delivery_fee) : 'Free'}</Typography>
                     </Stack>
                   )}
                   <Divider />
@@ -710,7 +670,7 @@ export default function AdminOrdersPage() {
                     onClick={() => runOrderAction(order, nextStatus[order.status])}
                     sx={{ maxWidth: '100%', whiteSpace: 'normal' }}
                   >
-                    {busyOrderId === order.id ? 'Saving…' : `Mark ${label(nextStatus[order.status])}`}
+                    {busyOrderId === order.id ? 'Saving…' : `Mark ${formatOrderStatus(nextStatus[order.status])}`}
                   </Button>
                 )}
                 {canEditOrders && order.payment_status === 'unpaid' && order.status !== 'cancelled' &&
@@ -824,7 +784,7 @@ export default function AdminOrdersPage() {
                   <>
                     <TextField
                       size="small"
-                      label={order.payment_status === 'unpaid' ? 'Void reason' : 'Cancellation reason'}
+                      label={order.payment_status === 'unpaid' ? 'Rejection reason' : 'Cancellation reason'}
                       value={cancelReasons[order.id] || ''}
                       onChange={(event) =>
                         setCancelReasons((current) => ({
@@ -841,7 +801,7 @@ export default function AdminOrdersPage() {
                       onClick={() => runOrderAction(order, 'cancelled')}
                       sx={{ maxWidth: '100%', whiteSpace: 'normal' }}
                     >
-                      {order.payment_status === 'unpaid' ? 'Void unpaid order' : 'Cancel order'}
+                      {order.payment_status === 'unpaid' ? 'Reject order' : 'Cancel order'}
                     </Button>
                   </>
                 )}

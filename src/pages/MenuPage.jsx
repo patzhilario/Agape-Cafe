@@ -72,12 +72,7 @@ export default function MenuPage() {
         setCategories(loadedCategories)
         setBranches(loadedBranches)
         const currentSelection = branchSelectionRef.current
-        if (
-          currentSelection.branchId &&
-          !loadedBranches.some((branch) => branch.id === currentSelection.branchId)
-        ) {
-          currentSelection.setBranchId('')
-        }
+        currentSelection.setBranchId(loadedBranches[0]?.id || '')
       })
       .catch((error) => {
         console.error('Unable to load public menu filters.', error)
@@ -273,32 +268,7 @@ export default function MenuPage() {
               useFlexGap
               sx={{ alignItems: { sm: 'center' }, flexWrap: 'wrap' }}
             >
-              <FormControl size="small" sx={{ width: { xs: '100%', sm: 250 }, flexShrink: 0 }}>
-                <InputLabel id="menu-branch-label">Branch availability</InputLabel>
-                <Select
-                  labelId="menu-branch-label"
-                  value={selectedBranch}
-                  label="Branch availability"
-                  onChange={(event) => {
-                    const nextBranchId = event.target.value
-                    const nextProducts = getCachedPublicProducts({
-                      branchId: nextBranchId || undefined,
-                    })
-                    if (nextProducts !== undefined) {
-                      setProducts(nextProducts)
-                      setIsLoading(false)
-                    } else {
-                      setIsLoading(true)
-                    }
-                    setBranchId(nextBranchId)
-                  }}
-                >
-                  <MenuItem value="">All published products</MenuItem>
-                  {branches.map((branch) => (
-                    <MenuItem key={branch.id} value={branch.id}>{branch.name}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+
               <FormControl size="small" sx={{ width: { xs: '100%', sm: 210 }, flexShrink: 0 }}>
                 <InputLabel id="menu-sort-label">Sort by</InputLabel>
                 <Select
@@ -365,7 +335,7 @@ export default function MenuPage() {
         </Tabs>
         {selectedBranch && (
           <Alert severity="info">
-            Showing products marked available at the selected branch. Final
+            Showing available products. Final
             availability is confirmed by the café.
           </Alert>
         )}

@@ -203,7 +203,7 @@ function BranchCard({ branch }) {
 
 export default function BranchCards({ branches }) {
   if (!branches.length) {
-    return <EmptyPublicState>No active branches have been published yet.</EmptyPublicState>
+    return <EmptyPublicState>Store details will be available soon.</EmptyPublicState>
   }
 
   return (

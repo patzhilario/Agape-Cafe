@@ -102,11 +102,11 @@ function asArray(value) {
 
 function AdminInventoryPage() {
   const { account, hasPermission } = useAuth()
-  const isSuperAdmin = account.roles.includes('super_admin')
-  const canManageInventory = isSuperAdmin ||
+  const isAdmin = account.roles.includes('admin')
+  const canManageInventory = isAdmin ||
     hasPermission('inventory', 'create') ||
     hasPermission('inventory', 'edit')
-  const canEditInventory = isSuperAdmin || hasPermission('inventory', 'edit')
+  const canEditInventory = isAdmin || hasPermission('inventory', 'edit')
   const [branches, setBranches] = useState([])
   const [branchId, setBranchId] = useState('')
   const [ingredients, setIngredients] = useState([])
@@ -150,8 +150,8 @@ function AdminInventoryPage() {
         if (!active) return
         setBranches(asArray(loadedBranches))
         setIngredients(asArray(loadedIngredients))
-        const assignedBranch = account.branchAssignments[0]?.branch_id
-        setBranchId((current) => current || (isSuperAdmin ? '' : assignedBranch || ''))
+
+        setBranchId(loadedBranches[0]?.id || '')
       })
       .catch((error) => {
         console.error('Unable to load inventory setup.', error)
@@ -161,7 +161,7 @@ function AdminInventoryPage() {
         if (active) setIsLoading(false)
       })
     return () => { active = false }
-  }, [account, isSuperAdmin, setupReloadKey])
+  }, [account, isAdmin, setupReloadKey])
 
   useEffect(() => {
     if (!branchId) {
@@ -428,7 +428,7 @@ function AdminInventoryPage() {
             useFlexGap
             sx={{ width: { xs: '100%', md: 'auto' }, flexWrap: 'wrap', justifyContent: { md: 'flex-end' } }}
           >
-            {inventoryView === 'stock' && isSuperAdmin && (
+            {inventoryView === 'stock' && isAdmin && (
               <Button
                 variant="outlined"
                 onClick={() => openIngredientEditor()}
@@ -452,24 +452,9 @@ function AdminInventoryPage() {
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         {successMessage && <Alert severity="success">{successMessage}</Alert>}
         {!canManageInventory && (
-          <Alert severity="info">You have view access only. Ask a Super Admin for Inventory create or edit permission to record stock movements.</Alert>
+          <Alert severity="info">You have view access only. Ask an Admin for Inventory create or edit permission to record stock movements.</Alert>
         )}
-        <FormControl fullWidth required>
-          <InputLabel id="inventory-branch-label">Branch</InputLabel>
-          <Select
-            labelId="inventory-branch-label"
-            label="Branch"
-            value={branchId}
-            onChange={(event) => {
-              setBranchId(event.target.value)
-              setInventoryPage(0)
-            }}
-          >
-            {branches.map((branch) => (
-              <MenuItem key={branch.id} value={branch.id}>{branch.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+
         <Tabs
           value={inventoryView}
           onChange={(_, value) => {
@@ -545,7 +530,7 @@ function AdminInventoryPage() {
                       <TableCell align="right">Current Qty Left</TableCell>
                       <TableCell align="right">Consumed This Week</TableCell>
                       <TableCell>Status</TableCell>
-                      {isSuperAdmin && <TableCell align="right">Actions</TableCell>}
+                      {isAdmin && <TableCell align="right">Actions</TableCell>}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -600,7 +585,7 @@ function AdminInventoryPage() {
                               </Typography>
                             </Stack>
                           </TableCell>
-                          {isSuperAdmin && (
+                          {isAdmin && (
                             <TableCell align="right">
                               <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end' }}>
                                 <Button size="small" onClick={() => openIngredientEditor(ingredient)}>Edit</Button>
@@ -634,7 +619,7 @@ function AdminInventoryPage() {
             }}
           />
         )}
-        {isSuperAdmin && ingredients.some((ingredient) => !ingredient.is_active) && (
+        {isAdmin && ingredients.some((ingredient) => !ingredient.is_active) && (
           <Accordion variant="outlined">
             <AccordionSummary
               expandIcon={<ExpandMoreIcon />}
@@ -659,7 +644,7 @@ function AdminInventoryPage() {
                     <TableHead>
                       <TableRow>
                         <TableCell>Item</TableCell>
-                        <TableCell>Stock in selected branch</TableCell>
+                        <TableCell>Stock in store</TableCell>
                         <TableCell align="right">Actions</TableCell>
                       </TableRow>
                     </TableHead>
@@ -697,7 +682,7 @@ function AdminInventoryPage() {
               <Box sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 3 } }}>
                 <Typography variant="h6">Low-stock alert settings</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Set a warning quantity for each item at this branch. The alert only warns you; it does not change stock.
+                  Set a warning quantity for each item at the store. The alert only warns you; it does not change stock.
                 </Typography>
                 <TextField
                   size="small"
@@ -715,7 +700,7 @@ function AdminInventoryPage() {
               {filteredIngredients.length ? (
                 <>
                   <TableContainer>
-                    <Table size="small" aria-label="Branch inventory alert settings" sx={{ minWidth: 680 }}>
+                    <Table size="small" aria-label="Inventory alert settings" sx={{ minWidth: 680 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell>Item</TableCell>
@@ -789,20 +774,20 @@ function AdminInventoryPage() {
               )}
               {!canEditInventory && (
                 <Alert severity="info" sx={{ mx: 2, mb: 2 }}>
-                  You have view access only. Ask a Super Admin for Inventory edit permission to change low-stock alerts.
+                  You have view access only. Ask an Admin for Inventory edit permission to change low-stock alerts.
                 </Alert>
               )}
             </Stack>
           </Paper>
         )}
-        {isSuperAdmin && (
+        {isAdmin && (
           <Dialog open={ingredientDialogOpen} onClose={() => !isSaving && setIngredientDialogOpen(false)} fullWidth maxWidth="sm">
             <Box component="form" onSubmit={addIngredient}>
               <DialogTitle>{editingIngredient ? 'Edit inventory item' : 'Add inventory item'}</DialogTitle>
               <DialogContent>
                 <Stack spacing={2} sx={{ pt: 1 }}>
                   <Typography variant="body2" color="text.secondary">
-                    This creates the item and its unit only. To enter how many you have, save it, then choose “Add stock / record usage” and enter a restock quantity for the selected branch.
+                    This creates the item and its unit only. To enter how many you have, save it, then choose “Add stock / record usage” and enter a restock quantity for the store.
                   </Typography>
                   <TextField label="Item name" value={ingredientName} onChange={(event) => setIngredientName(event.target.value)} required slotProps={{ htmlInput: { maxLength: 120 } }} autoFocus />
                   <TextField
@@ -903,7 +888,7 @@ function AdminInventoryPage() {
             <DialogContent>
               <Stack spacing={2} sx={{ pt: 1 }}>
                 <Typography variant="body2" color="text.secondary">
-                  Branch: {branches.find((branch) => branch.id === branchId)?.name || 'Select a branch'}
+                  Store: {branches.find((branch) => branch.id === branchId)?.name || 'Store unavailable'}
                 </Typography>
                 <FormControl fullWidth required>
                   <InputLabel id="movement-ingredient-label">Inventory item</InputLabel>
@@ -1038,7 +1023,7 @@ function AdminInventoryPage() {
                 </TableContainer>
               ) : (
                 <Typography color="text.secondary">
-                  {movements.length === 0 ? 'No inventory movements recorded for this branch.' : 'No movements match your search.'}
+                  {movements.length === 0 ? 'No inventory movements recorded for the store.' : 'No movements match your search.'}
                 </Typography>
               )}
             </Stack>

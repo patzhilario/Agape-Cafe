@@ -1,0 +1,30 @@
+.order-receipt { box-sizing: border-box; margin: 0 auto; background: #fff; color: #171411; padding: 6mm; font: 12px/1.5 'Courier New', monospace; box-shadow: 0 8px 28px #20170e18; overflow-wrap: anywhere; }
+.receipt-thermal { width: 80mm; }
+.receipt-a4 { width: 210mm; padding: 16mm; font-size: 14px; }
+.receipt-brand { text-align: center; margin-bottom: 14px; }
+.receipt-brand img { border-radius: 50%; object-fit: cover; }
+.receipt-brand h1 { margin: 6px 0; font: 700 22px/1.15 Georgia, serif; }
+.receipt-brand p, .receipt-footer p { margin: 3px 0; }
+.receipt-document-name { margin-top: 14px; font-weight: bold; letter-spacing: 2px; }
+.receipt-status { text-align: center; padding: 7px 0; margin-bottom: 12px; border-top: 1px solid; border-bottom: 1px solid; font-size: 11px; font-weight: bold; letter-spacing: 1px; }
+.receipt-meta div, .receipt-totals div, .receipt-payment div { display: flex; justify-content: space-between; gap: 10px; margin: 5px 0; }
+.receipt-meta div > :last-child, .receipt-payment div > :last-child { text-align: right; min-width: 0; }
+.receipt-meta div > :first-child, .receipt-payment div > :first-child { flex-shrink: 0; }
+.receipt-items { width: 100%; margin-top: 16px; border-collapse: collapse; }
+.receipt-items th { border-top: 1px dashed; border-bottom: 1px dashed; padding: 7px 0; text-align: left; font-size: 11px; }
+.receipt-items td { padding: 9px 0; vertical-align: top; border-bottom: 1px dotted #bbb; }
+.receipt-items th:last-child, .receipt-items td:last-child { text-align: right; padding-left: 8px; white-space: nowrap; }
+.receipt-items small { display: block; font-size: 11px; margin-top: 2px; }
+.receipt-totals { margin: 12px 0; }
+.receipt-totals .receipt-grand-total { border-top: 2px solid; border-bottom: 2px solid; padding: 9px 0; margin-top: 10px; font-size: 18px; font-weight: bold; }
+.receipt-payment { border-bottom: 1px dashed; padding-bottom: 12px; }
+.receipt-payment p { font-size: 11px; }
+.receipt-footer { text-align: center; padding-top: 16px; font-size: 11px; }
+.receipt-items tr, .receipt-totals, .receipt-payment, .receipt-footer { break-inside: avoid; }
+#receipt-print-root { display: none; }
+@media print {
+  html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+  body > *:not(#receipt-print-root) { display: none !important; }
+  #receipt-print-root { display: block !important; }
+  #receipt-print-root .order-receipt { margin: 0; box-shadow: none; }
+}

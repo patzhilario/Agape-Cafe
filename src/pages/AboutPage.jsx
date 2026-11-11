@@ -286,11 +286,11 @@ export default function AboutPage() {
             </Button>
             <Button
               component={RouterLink}
-              to="/branches"
+              to="/visit"
               variant="text"
               sx={{ minHeight: 44, whiteSpace: 'nowrap' }}
             >
-              Find a branch
+              Visit the cafe
             </Button>
           </Stack>
         </Box>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CartContext } from './CartContext.js'
 import { getCartItemKey } from './cartUtils.js'
+import { getPublicBranches } from '../public/publicData.js'
 
 const CART_STORAGE_KEY = 'agape-cart-v1'
 const MAX_QUANTITY = 20
@@ -22,7 +23,7 @@ function readCart() {
           item.quantity <= MAX_QUANTITY &&
           Array.isArray(item.addons),
       ),
-      branchId: typeof saved.branchId === 'string' ? saved.branchId : '',
+      branchId: '',
     }
   } catch (error) {
     console.error('Unable to restore the saved cart.', error)
@@ -40,6 +41,17 @@ export function CartProvider({ children }) {
   const [isCartOpen, setIsCartOpen] = useState(false)
   const openCart = useCallback(() => setIsCartOpen(true), [])
   const closeCart = useCallback(() => setIsCartOpen(false), [])
+
+  useEffect(() => {
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) return undefined
+    let active = true
+    getPublicBranches()
+      .then(([store]) => {
+        if (active && store) setCart((current) => ({ ...current, branchId: store.id }))
+      })
+      .catch((error) => console.error('Unable to load the store location.', error))
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     try {
@@ -99,9 +111,9 @@ export function CartProvider({ children }) {
     setCart((current) => ({ ...current, items: [] }))
   }
 
-  function setBranchId(branchId) {
-    setCart((current) => ({ ...current, branchId }))
-  }
+  const setBranchId = useCallback((branchId) => {
+    setCart((current) => current.branchId === branchId ? current : { ...current, branchId })
+  }, [])
 
   const totalQuantity = cart.items.reduce((total, item) => total + item.quantity, 0)
   const subtotal = cart.items.reduce((total, item) => {

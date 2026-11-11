@@ -74,10 +74,10 @@ export default function AdminBenefitPolicyPage() {
     } finally { setIsSaving(false) }
   }
 
-  if (!account.roles.includes('super_admin')) {
+  if (!account.roles.includes('admin')) {
     return (
       <Container maxWidth="md" sx={{ py: 8 }}>
-        <Alert severity="warning">Only a Super Admin can configure the benefit discount policy.</Alert>
+        <Alert severity="warning">Only an Admin can configure the benefit discount policy.</Alert>
       </Container>
     )
   }
@@ -87,7 +87,7 @@ export default function AdminBenefitPolicyPage() {
     <Container maxWidth="md" sx={{ py: { xs: 5, md: 8 } }}>
       <Stack spacing={3}>
         <Box>
-          <Typography variant="overline" color="primary">Agapé Café · Super Admin</Typography>
+          <Typography variant="overline" color="primary">Agapé Café · Admin</Typography>
           <Typography variant="h2">Benefit discount policy</Typography>
           <Typography color="text.secondary">
             Philippine law provides at least a 20% discount and applicable VAT

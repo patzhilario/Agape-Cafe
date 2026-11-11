@@ -1,3 +1,5 @@
+import { validatePaymentReceipt } from '../features/orders/paymentReceipt.js'
+import { formatOrderStatus } from '../features/orders/orderStatus.js'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -8,7 +10,6 @@ import {
   Divider,
   Paper,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
@@ -45,9 +46,7 @@ export default function OrderDetailPage() {
   const [benefitReloadKey, setBenefitReloadKey] = useState(0)
   const [orderReloadKey, setOrderReloadKey] = useState(0)
   const [paymentProofFile, setPaymentProofFile] = useState(null)
-  const [paymentReference, setPaymentReference] = useState('')
   const [paymentProofError, setPaymentProofError] = useState('')
-  const [paymentProofSuccess, setPaymentProofSuccess] = useState('')
   const [isSubmittingPaymentProof, setIsSubmittingPaymentProof] = useState(false)
 
   useEffect(() => {
@@ -78,18 +77,29 @@ export default function OrderDetailPage() {
     return () => { active = false }
   }, [orderId, benefitReloadKey])
 
+  useEffect(() => {
+    const refresh = (event) => {
+      if (event.detail?.orderId === orderId) setOrderReloadKey((key) => key + 1)
+    }
+    window.addEventListener('customer-order-update', refresh)
+    return () => window.removeEventListener('customer-order-update', refresh)
+  }, [orderId])
+
   const order = result.id === orderId ? result.order : null
   const errorMessage = result.id === orderId ? result.error : ''
   const isLoading = result.id !== orderId
   const benefitRequest = benefitResult.id === orderId ? benefitResult.request : null
   const benefitRequestError = benefitResult.id === orderId ? benefitResult.error : ''
-  const paymentProof = order?.payment_proof?.[0]
+  const paymentProof = Array.isArray(order?.payment_proof) ? order.payment_proof[0] : order?.payment_proof
   const isOnlinePayment = order?.payment?.method?.settlement_type === 'provider'
   const paymentMethodName = order?.payment?.payment_method_name || 'Online payment'
+  const isPaymentVerified = order?.payment_status === 'paid' || paymentProof?.status === 'approved'
+  const needsPaymentReceipt = isOnlinePayment && order?.payment_status === 'unpaid' && !isPaymentVerified &&
+    !['cancelled', 'completed'].includes(order?.status) && (!paymentProof || paymentProof.status === 'rejected')
   const paymentProofNotice = !paymentProof && (
     location.state?.paymentProofError || (
       searchParams.get('proof') === 'needed'
-        ? 'Your order was created, but the payment receipt could not be attached. Enter the reference number and upload it here.'
+        ? 'Your order was created, but the payment receipt could not be attached. Upload the JPEG receipt here.'
         : ''
     )
   )
@@ -97,32 +107,14 @@ export default function OrderDetailPage() {
   async function uploadPaymentProof(event) {
     event.preventDefault()
     setPaymentProofError('')
-    setPaymentProofSuccess('')
-    if (!paymentProofFile) {
-      setPaymentProofError('Choose a payment screenshot or PDF first.')
-      return
-    }
-    if (paymentReference.trim().length < 4 || paymentReference.trim().length > 50) {
-      setPaymentProofError('Enter a payment reference number between 4 and 50 characters.')
-      return
-    }
-    if (paymentProofFile.size > 10 * 1024 * 1024) {
-      setPaymentProofError('The payment proof must be 10 MB or smaller.')
-      return
-    }
-    const extensionByMime = {
-      'image/jpeg': 'jpg',
-      'image/png': 'png',
-      'image/webp': 'webp',
-      'application/pdf': 'pdf',
-    }
-    const extension = extensionByMime[paymentProofFile.type]
-    if (!extension) {
-      setPaymentProofError('Use a JPG, PNG, WebP, or PDF payment proof.')
+    try {
+      await validatePaymentReceipt(paymentProofFile)
+    } catch (error) {
+      setPaymentProofError(error.message)
       return
     }
     const previousPath = paymentProof?.document_path
-    const path = `${account.id}/${orderId}/proof-${crypto.randomUUID()}.${extension}`
+    const path = `${account.id}/${orderId}/proof-${crypto.randomUUID()}.jpg`
     setIsSubmittingPaymentProof(true)
     let uploaded = false
     try {
@@ -135,7 +127,7 @@ export default function OrderDetailPage() {
         })
       if (error) throw new Error(`Could not upload payment proof: ${error.message}`)
       uploaded = true
-      await submitOrderPaymentProof(orderId, path, paymentReference.trim())
+      await submitOrderPaymentProof(orderId, path)
       if (previousPath) {
         const { error: removePreviousError } = await getSupabaseClient()
           .storage
@@ -144,7 +136,6 @@ export default function OrderDetailPage() {
         if (removePreviousError) console.error('Unable to remove the replaced payment proof.', removePreviousError)
       }
       setPaymentProofFile(null)
-      setPaymentProofSuccess('Payment proof submitted. The selected branch will verify it before marking the order paid.')
       setResult((current) => ({
         ...current,
         order: {
@@ -152,7 +143,6 @@ export default function OrderDetailPage() {
           payment_proof: [{
             status: 'pending',
             document_path: path,
-            reference_number: paymentReference.trim(),
             created_at: new Date().toISOString(),
           }],
         },
@@ -193,6 +183,7 @@ export default function OrderDetailPage() {
         >
           Refresh order and discount status
         </Button>
+        {order && <Button component={RouterLink} to={`/receipt/${order.id}`} target="_blank" rel="noopener noreferrer" variant="outlined" sx={{ alignSelf: 'flex-start' }}>Print receipt</Button>}
         {searchParams.get('placed') === '1' && (
           <Alert severity="success">
             Order received.
@@ -215,26 +206,17 @@ export default function OrderDetailPage() {
             <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
               <Stack spacing={2}>
                 <Typography variant="h6">Order status</Typography>
-                <Typography>{formatStatus(order.status)}</Typography>
+                <Typography>{formatOrderStatus(order.status)}</Typography>
                 <Divider />
-                <Typography variant="h6">Pickup and contact</Typography>
-                <Typography>{order.branch?.name}</Typography>
-                {order.branch?.address && (
-                  <Typography color="text.secondary">{order.branch.address}</Typography>
-                )}
+                <Typography variant="h6">Order type and contact</Typography>
+
                 <Typography>
                   {formatStatus(order.fulfillment_method)}
-                  {order.dining_table?.label ? ` · Table ${order.dining_table.label}` : ''}
                 </Typography>
                 {order.fulfillment_method === 'delivery' && (
                   <>
                     <Typography>Delivery address: {order.delivery_address}</Typography>
-                    {Number(order.delivery_fee) > 0 && (
-                      <Typography>Café delivery charge: {formatPrice(order.delivery_fee)}</Typography>
-                    )}
-                    <Alert severity="info">
-                      The delivery rider or booking fee is paid separately by the customer directly to the rider/service.
-                    </Alert>
+                    <Typography>Delivery fee: {Number(order.delivery_fee) > 0 ? formatPrice(order.delivery_fee) : 'Free'}</Typography>
                   </>
                 )}
                 <Typography>{order.customer_phone}</Typography>
@@ -270,7 +252,7 @@ export default function OrderDetailPage() {
                         {item.variant_name ? ` · ${item.variant_name}` : ''}
                         {item.serving_type && (
                           <span style={{ fontSize: '0.85em', opacity: 0.8, marginLeft: 6 }}>
-                            ({item.serving_type === 'cup' ? 'Takeout Cup' : 'Glass / Mug'})
+                            ({item.serving_type === 'cup' ? 'Cup' : 'Glass / Mug'})
                           </span>
                         )}
                       </Typography>
@@ -291,10 +273,10 @@ export default function OrderDetailPage() {
                   <Typography>Subtotal</Typography>
                   <Typography>{formatPrice(order.subtotal)}</Typography>
                 </Stack>
-                {order.fulfillment_method === 'delivery' && Number(order.delivery_fee) > 0 && (
+                {order.fulfillment_method === 'delivery' && (
                   <Stack direction="row" spacing={2} sx={{ justifyContent: 'space-between' }}>
-                    <Typography>Café delivery charge</Typography>
-                    <Typography>{formatPrice(order.delivery_fee)}</Typography>
+                    <Typography>Delivery fee</Typography>
+                    <Typography>{Number(order.delivery_fee) > 0 ? formatPrice(order.delivery_fee) : 'Free'}</Typography>
                   </Stack>
                 )}
                 {Number(order.discount_total) > 0 && (
@@ -308,95 +290,55 @@ export default function OrderDetailPage() {
                   <Typography variant="h6">{formatPrice(order.total)}</Typography>
                 </Stack>
                 {order.payment && (
-                  <Alert severity="info">
-                    {order.payment.payment_method_name}: {formatStatus(order.payment_status)}
+                  <Alert severity={isPaymentVerified ? 'success' : paymentProof?.status === 'rejected' ? 'warning' : 'info'}>
+                    {paymentMethodName}: {isPaymentVerified
+                      ? 'Payment verified. Thank you!'
+                      : paymentProof?.status === 'pending'
+                        ? 'Receipt received. Awaiting verification. No need to pay again or upload another receipt.'
+                        : formatStatus(order.payment_status)}
                   </Alert>
                 )}
-                {isOnlinePayment && paymentProof && (
-                  <Alert severity={paymentProof.status === 'approved' ? 'success' : paymentProof.status === 'rejected' ? 'error' : 'info'}>
-                    Payment proof: {formatStatus(paymentProof.status)}
-                    {paymentProof.reference_number ? ` · Reference: ${paymentProof.reference_number}` : ''}
-                    {paymentProof.review_note ? ` · ${paymentProof.review_note}` : ''}
+                {isOnlinePayment && paymentProof?.status === 'rejected' && (
+                  <Alert severity="warning">
+                    Payment receipt rejected{paymentProof.review_note ? `: ${paymentProof.review_note}` : '.'}
+                    {' '}Upload a clearer or corrected JPEG receipt below. If you already paid, do not pay again unless the store instructs you to.
                   </Alert>
+                )}
+                {needsPaymentReceipt && benefitRequest?.status === 'pending' && (
+                  <Alert severity="info">Wait for the store to verify your benefit discount before uploading payment proof.</Alert>
                 )}
               </Stack>
             </Paper>
-            {isOnlinePayment && order.payment_status === 'unpaid' && !['cancelled', 'completed'].includes(order.status) && (
+            {needsPaymentReceipt && benefitRequest?.status !== 'pending' && (
               <Paper component="form" onSubmit={uploadPaymentProof} variant="outlined" sx={{ p: { xs: 2, sm: 3 } }}>
                 <Stack spacing={2}>
-                  <Typography variant="h6">{paymentMethodName} payment</Typography>
+                  <Typography variant="h6">{paymentProof?.status === 'rejected' ? 'Replace rejected receipt' : 'Upload payment receipt'}</Typography>
                   {paymentProofNotice && <Alert severity="warning">{paymentProofNotice}</Alert>}
-                  {benefitRequest?.status === 'pending' && (
-                    <Alert severity="info">
-                      Your benefit ID is being verified. The branch will review your payment proof after confirming the discount and updated total.
-                    </Alert>
-                  )}
-                  {paymentProof?.status === 'pending' && (
-                    <Alert severity="info">
-                      Payment proof received{paymentProof.reference_number ? ` · Reference: ${paymentProof.reference_number}` : ''}. No need to upload it again; the branch will verify your payment.
-                    </Alert>
-                  )}
-                  {paymentProof?.status === 'approved' && (
-                    <Alert severity="success">
-                      Payment verified{paymentProof.reference_number ? ` · Reference: ${paymentProof.reference_number}` : ''}. Thank you!
-                    </Alert>
-                  )}
-                  {paymentProof?.status === 'rejected' && paymentProof.review_note && (
-                    <Alert severity="warning">{paymentProof.review_note}</Alert>
-                  )}
-                  {benefitRequest?.status !== 'pending' &&
-                    !['pending', 'approved'].includes(paymentProof?.status) && (
-                    <>
-                      {(order.payment?.method?.qr_code_path || (
-                        order.payment?.payment_method_code === 'gcash' ? order.branch?.gcash_qr_path : null
-                      )) && (
-                        <Box
-                          component="img"
-                          src={getSupabaseClient().storage.from('branch-payment-qr').getPublicUrl(
-                            order.payment?.method?.qr_code_path || order.branch?.gcash_qr_path,
-                          ).data.publicUrl}
-                          alt={`${order.branch?.name} ${paymentMethodName} QR code`}
-                          sx={{ width: 'min(100%, 280px)', maxHeight: 280, objectFit: 'contain', alignSelf: 'center' }}
-                        />
-                      )}
-                      <Typography color="text.secondary">
-                        {paymentProof?.status === 'rejected'
-                          ? `Upload a new receipt for the current order total of ${formatPrice(order.total)} to ${order.branch?.name} using the QR above.`
-                          : `Pay the current order total of ${formatPrice(order.total)} to ${order.branch?.name} using the QR above, then enter the reference number and upload your receipt.`}
-                      </Typography>
-                      {(!paymentProof || paymentProof.status === 'rejected') && (
-                        <TextField
-                          label={`${paymentMethodName} reference number`}
-                          value={paymentReference}
-                          onChange={(event) => setPaymentReference(event.target.value)}
-                          required
-                          slotProps={{ htmlInput: { maxLength: 50 } }}
-                        />
-                      )}
-                      {paymentProofError && <Alert severity="error">{paymentProofError}</Alert>}
-                      {paymentProofSuccess && <Alert severity="success">{paymentProofSuccess}</Alert>}
-                      <Button
-                        component="label"
-                        variant="outlined"
-                        fullWidth
-                        sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}
-                      >
-                        {paymentProofFile?.name || (paymentProof?.status === 'rejected' ? 'Upload new payment proof' : 'Choose payment screenshot or PDF')}
-                        <input
-                          hidden
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,application/pdf"
-                          onChange={(event) => {
-                            setPaymentProofFile(event.target.files?.[0] || null)
-                            event.target.value = ''
-                          }}
-                        />
-                      </Button>
-                      <Button type="submit" variant="contained" disabled={isSubmittingPaymentProof || !paymentProofFile || paymentReference.trim().length < 4}>
-                        {isSubmittingPaymentProof ? 'Uploading…' : 'Submit payment proof'}
-                      </Button>
-                    </>
-                  )}
+                  {paymentProofError && <Alert severity="error">{paymentProofError}</Alert>}
+                  <Typography color="text.secondary">
+                    Attach the JPEG receipt for your {paymentMethodName} payment of {formatPrice(order.total)}.
+                    If you already paid, upload your existing receipt. Do not pay again.
+                  </Typography>
+                  <Button
+                    component="label"
+                    variant="outlined"
+                    fullWidth
+                    sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}
+                  >
+                    {paymentProofFile?.name || (paymentProof?.status === 'rejected' ? 'Upload new payment proof' : 'Choose JPEG payment receipt')}
+                    <input
+                      hidden
+                      type="file"
+                      accept="image/jpeg,.jpg,.jpeg"
+                      onChange={(event) => {
+                        setPaymentProofFile(event.target.files?.[0] || null)
+                        event.target.value = ''
+                      }}
+                    />
+                  </Button>
+                  <Button type="submit" variant="contained" disabled={isSubmittingPaymentProof || !paymentProofFile}>
+                    {isSubmittingPaymentProof ? 'Uploading…' : 'Submit payment proof'}
+                  </Button>
                 </Stack>
               </Paper>
             )}

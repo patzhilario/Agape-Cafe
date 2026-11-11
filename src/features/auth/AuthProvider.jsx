@@ -10,7 +10,7 @@ import { ADMIN_ROLES } from './authConstants.js'
 import { AuthContext } from './AuthContext.js'
 
 function getHomePath(roles) {
-  if (roles.includes('super_admin') || roles.includes('branch_admin') || roles.includes('staff')) {
+  if (roles.some((role) => ADMIN_ROLES.includes(role))) {
     return '/admin'
   }
   return '/customer'
@@ -61,7 +61,7 @@ export function AuthProvider({ children }) {
           await Promise.all([
             supabase
               .from('profiles')
-              .select('id, email, display_name, phone, address, avatar_path, is_active')
+              .select('id, email, username, first_name, last_name, middle_initial, display_name, phone, address, avatar_path, is_active')
               .eq('id', userId)
               .maybeSingle(),
             supabase.from('user_roles').select('role').eq('user_id', userId),
@@ -186,26 +186,6 @@ export function AuthProvider({ children }) {
     }
   }, [client])
 
-  const signInWithGoogle = useCallback(async (nextPath = '/') => {
-    if (!client) {
-      throw new Error(configurationError || 'Supabase is not configured.')
-    }
-    const safeNextPath =
-      nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/'
-    const redirectTo = new URL('/auth/callback', window.location.origin)
-    redirectTo.searchParams.set('next', safeNextPath)
-
-    const { error } = await client.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectTo.toString(),
-        queryParams: { prompt: 'select_account' },
-      },
-    })
-
-    if (error) throw error
-  }, [client, configurationError])
-
   const signOut = useCallback(async () => {
     if (!client) return
     const { error } = await client.auth.signOut()
@@ -219,17 +199,26 @@ export function AuthProvider({ children }) {
     if (!client || !accountRef.current) {
       throw new Error('Sign in before updating your profile.')
     }
+    const userId = accountRef.current.id
+    const changes = {
+      display_name: profile.display_name.trim(),
+      phone: profile.phone.trim() || null,
+      address: profile.address.trim() || null,
+    }
+    if (profile.username !== undefined) changes.username = profile.username.trim().toLowerCase() || null
+    if (profile.first_name !== undefined) changes.first_name = profile.first_name.trim() || null
+    if (profile.last_name !== undefined) changes.last_name = profile.last_name.trim() || null
+    if (profile.middle_initial !== undefined) changes.middle_initial = profile.middle_initial.trim().toUpperCase() || null
+
     const { data, error } = await client
       .from('profiles')
-      .update({
-        display_name: profile.display_name.trim(),
-        phone: profile.phone.trim() || null,
-        address: profile.address.trim() || null,
-      })
-      .eq('id', accountRef.current.id)
-      .select('display_name, phone, address')
+      .update(changes)
+      .eq('id', userId)
+      .select('username, first_name, last_name, middle_initial, display_name, phone, address')
       .single()
+    if (error?.code === '23505') throw new Error('That username is already taken. Choose another username.')
     if (error) throw new Error(`Could not save your profile: ${error.message}`)
+    if (accountRef.current?.id !== userId) throw new Error('Your session changed. Sign in again before saving your profile.')
     const updatedAccount = { ...accountRef.current, ...data }
     accountRef.current = updatedAccount
     setAccount(updatedAccount)
@@ -244,12 +233,11 @@ export function AuthProvider({ children }) {
       authError,
       configurationError,
       isConfigured: Boolean(client),
-      signInWithGoogle,
       signOut,
       updateProfile,
       hasRole: (roles) => roles.some((role) => account?.roles.includes(role)),
       hasPermission: (module, action = 'view') =>
-        account?.roles.includes('super_admin') ||
+        account?.roles.includes('admin') ||
         account?.permissions.some(
           (permission) =>
             permission.module === module &&
@@ -259,10 +247,10 @@ export function AuthProvider({ children }) {
             ),
         ) ||
         false,
-      isBranchAdmin: () =>
+      canAccessWorkspace: () =>
         account?.roles.some((role) => ADMIN_ROLES.includes(role)) ?? false,
     }),
-    [account, session, isLoading, authError, configurationError, client, signInWithGoogle, signOut, updateProfile],
+    [account, session, isLoading, authError, configurationError, client, signOut, updateProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

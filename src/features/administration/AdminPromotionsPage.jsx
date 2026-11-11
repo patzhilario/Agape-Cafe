@@ -38,7 +38,7 @@ function check({ data, error }) {
 
 function AdminPromotionsPage() {
   const { account } = useAuth()
-  const isSuperAdmin = account.roles.includes('super_admin')
+  const isAdmin = account.roles.includes('admin')
   const [promotions, setPromotions] = useState([])
   const [products, setProducts] = useState([])
   const [targets, setTargets] = useState([])
@@ -196,10 +196,10 @@ function AdminPromotionsPage() {
 
   if (isLoading) return <Stack sx={{ alignItems: 'center', py: 10 }}><CircularProgress /></Stack>
 
-  if (!isSuperAdmin) {
+  if (!isAdmin) {
     return (
       <Container maxWidth="md" sx={{ py: 8 }}>
-        <Alert severity="warning">Promotion configuration is restricted to a Super Admin.</Alert>
+        <Alert severity="warning">Promotion configuration is restricted to an Admin.</Alert>
       </Container>
     )
   }

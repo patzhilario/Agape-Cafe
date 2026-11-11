@@ -223,7 +223,7 @@ export default function HomePage() {
                 </Button>
                 <Button
                   component={RouterLink}
-                  to="/branches"
+                  to="/visit"
                   variant="text"
                   color="primary"
                   size="large"
@@ -521,25 +521,25 @@ export default function HomePage() {
           <Box>
             <SectionHeading
               eyebrow="Come by"
-              title="Our branches"
-              description="Branch details published by Agapé Café."
+              title="Visit our cafe"
+              description="Find our location and opening hours."
               action={
                 <Button
                   component={RouterLink}
-                  to="/branches"
+                  to="/visit"
                   endIcon={<ArrowForwardIcon />}
                   sx={{ whiteSpace: 'nowrap' }}
                 >
-                  All branches
+                  Location details
                 </Button>
               }
             />
             {!hasSupabaseConfig ? (
               <EmptyPublicState>
-                Connect Supabase to display active branch information.
+                Connect Supabase to display store information.
               </EmptyPublicState>
             ) : isLoading ? (
-              <PublicLoading label="Loading active branches…" />
+              <PublicLoading label="Loading store details…" />
             ) : (
               <BranchCards branches={branches.slice(0, 3)} />
             )}

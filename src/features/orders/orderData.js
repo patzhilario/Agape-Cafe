@@ -7,17 +7,11 @@ export async function getAvailablePaymentMethods(branchId) {
     .select('id, code, name, instructions, settlement_type, qr_code_path')
     .eq('branch_id', branchId)
     .eq('is_active', true)
+    .eq('settlement_type', 'provider')
+    .not('qr_code_path', 'is', null)
     .order('name')
 
   if (error) throw new Error(`Could not load payment options: ${error.message}`)
-  return data
-}
-
-export async function getAvailableDiningTables(branchId) {
-  const { data, error } = await getSupabaseClient().rpc('get_available_dining_tables', {
-    target_branch_id: branchId,
-  })
-  if (error) throw new Error(`Could not load available dining tables: ${error.message}`)
   return data
 }
 
@@ -25,7 +19,7 @@ export async function getEligiblePromotions(productIds) {
   const { data, error } = await getSupabaseClient()
     .from('promotions')
     .select(
-      'id, name, description, terms, discount_type, discount_value, max_discount, minimum_purchase, starts_at, ends_at, promotion_products(product_id)',
+      'id, name, description, terms, discount_type, discount_value, max_discount, minimum_purchase, max_uses_per_customer, starts_at, ends_at, promotion_products(product_id)',
     )
     .eq('is_active', true)
     .lte('starts_at', new Date().toISOString())
@@ -41,14 +35,13 @@ export async function getEligiblePromotions(productIds) {
 }
 
 export async function createCustomerOrder({
-  branchId,
   fulfillment,
-  diningTableId,
   paymentMethodId,
   requestId,
   phone,
   note,
   deliveryAddress,
+  expectedDeliveryFee,
   promotionId,
   items,
   benefitRequest,
@@ -60,14 +53,14 @@ export async function createCustomerOrder({
     quantity: item.quantity,
     serving_type: item.servingType || null,
   }))
-  const { data, error } = await getSupabaseClient().rpc('create_customer_order_with_table', {
-    target_branch_id: branchId,
+  const { data, error } = await getSupabaseClient().rpc('create_store_order', {
     fulfillment,
     payment_method_id: paymentMethodId,
     client_request_id: requestId,
     customer_phone: phone,
     customer_note: note,
     customer_delivery_address: deliveryAddress || null,
+    expected_delivery_fee: expectedDeliveryFee ?? null,
     requested_promotion_id: promotionId || null,
     cart_items: cartItems,
     target_benefit_request_id: benefitRequest?.requestId || null,
@@ -79,7 +72,6 @@ export async function createCustomerOrder({
       eligible_quantity: item.quantity,
     })) || null,
     uploaded_benefit_document_path: benefitRequest?.documentPath || null,
-    target_dining_table_id: diningTableId || null,
   })
 
   if (error) {
@@ -99,7 +91,7 @@ export async function getCustomerOrders(page = 0, pageSize = 25) {
     .from('orders')
     .select(`
       id, order_number, branch_id, customer_name, customer_phone,
-      fulfillment_method, dining_table:branch_dining_tables(label), customer_note, delivery_address, delivery_fee, status, payment_status,
+      fulfillment_method, customer_note, delivery_address, delivery_fee, status, payment_status,
       subtotal, discount_total, total, created_at,
       branch:branches(name),
       items:order_items(
@@ -124,7 +116,7 @@ export async function getCustomerOrder(orderId) {
     .from('orders')
     .select(`
       id, order_number, branch_id, customer_name, customer_email, customer_phone,
-      fulfillment_method, dining_table:branch_dining_tables(label), customer_note, delivery_address, delivery_fee, status, payment_status,
+      fulfillment_method, customer_note, delivery_address, delivery_fee, status, payment_status,
       subtotal, discount_total, total, promotion_id, created_at, cancellation_reason,
       branch:branches(name, address, phone, gcash_qr_path),
       items:order_items(
@@ -145,11 +137,11 @@ export async function getCustomerOrder(orderId) {
   return data
 }
 
-export async function submitOrderPaymentProof(orderId, documentPath, referenceNumber) {
+export async function submitOrderPaymentProof(orderId, documentPath) {
   const { data, error } = await getSupabaseClient().rpc('submit_order_payment_proof', {
     target_order_id: orderId,
     uploaded_document_path: documentPath,
-    payment_reference_number: referenceNumber,
+    payment_reference_number: null,
   })
   if (error) throw new Error(`Could not submit payment proof: ${error.message}`)
   return data
@@ -207,18 +199,23 @@ function mapOrderError({ message = '', code }) {
     'Upload a private document under your own request folder.',
     'A benefit discount must be requested on an unpaid, active order.',
     'Sign in with an active account to place an order.',
-    'Choose your dine-in table.',
-    'A dining table can only be selected for dine-in orders.',
-    'That table is unavailable. Refresh the table list and choose another.',
-    'That table has just been reserved. Refresh the table list and choose another.',
     'Choose an active payment method configured for this branch.',
     'This online payment method does not have a QR code configured.',
     'Pick-up and delivery orders require an online QR payment method.',
     'Choose a supported order type.',
+    'All orders require an active e-payment method with a QR code.',
+    'Online orders require an active e-payment method. Cash is available only at POS.',
+    'Choose Dine-in, Pick-up, or Delivery.',
+    'Delivery fee changed. Review the updated total. If you already paid, contact the store before submitting.',
+    'Enter a delivery address between 8 and 500 characters.',
+    'Delivery is not available from the selected branch.',
+    'Orders must belong to the store.',
+    'This order submission key was already used for different fulfillment details.',
+    'Benefit discounts are available for Dine-in orders.',
     'Each cart item quantity must be between 1 and 20.',
   ]
   const matchingError = knownErrors.find((known) => message.includes(known))
-  if (matchingError) return matchingError
+  if (matchingError) return matchingError.replace("Choose a branch, fulfillment method, and payment method.", "Choose an order type and payment method.").replaceAll("the selected branch", "the store").replaceAll("this branch", "the store").replace("This branch", "The store")
   if (code === 'PGRST202') {
     return 'Checkout is temporarily unavailable. Please ask the shop to check its database setup.'
   }

@@ -32,7 +32,7 @@ export function SupabaseSetupNotice() {
     <Alert severity="info">
       Public shop information is served from Supabase. Configure the Supabase
       URL and publishable key, then apply the database migrations to display
-      the live menu and branches.
+      the live menu and store details.
     </Alert>
   )
 }

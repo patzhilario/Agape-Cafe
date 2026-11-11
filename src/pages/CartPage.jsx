@@ -5,10 +5,6 @@ import {
   Box,
   Button,
   Container,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
   Stack,
   Typography,
 } from '@mui/material'
@@ -25,9 +21,8 @@ const hasSupabaseConfig =
   Boolean(import.meta.env.VITE_SUPABASE_ANON_KEY)
 
 export default function CartPage() {
-  const { items, branchId, subtotal, setBranchId, updateQuantity, removeItem } = useCart()
+  const { items, branchId, subtotal, updateQuantity, removeItem } = useCart()
   const cachedBranches = getCachedPublicBranches()
-  const [branches, setBranches] = useState(cachedBranches || [])
   const [isLoading, setIsLoading] = useState(hasSupabaseConfig && cachedBranches === undefined)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -35,11 +30,8 @@ export default function CartPage() {
     if (!hasSupabaseConfig) return undefined
     let active = true
     getPublicBranches()
-      .then((loadedBranches) => {
-        if (active) setBranches(loadedBranches)
-      })
       .catch((error) => {
-        console.error('Unable to load branches for the cart.', error)
+        console.error('Unable to load store for the cart.', error)
         if (active) setErrorMessage(error.message)
       })
       .finally(() => {
@@ -62,7 +54,7 @@ export default function CartPage() {
         {!hasSupabaseConfig && <SupabaseSetupNotice />}
         {errorMessage && <PublicDataError message={errorMessage} />}
         {isLoading ? (
-          <PublicLoading label="Loading branches…" />
+          <PublicLoading label="Loading store…" />
         ) : items.length === 0 ? (
           <Stack spacing={2} sx={{ alignItems: 'flex-start' }}>
             <Typography color="text.secondary">Your cart is empty.</Typography>
@@ -127,24 +119,6 @@ export default function CartPage() {
                 </Stack>
               )
             })}
-            <FormControl fullWidth>
-              <InputLabel id="cart-branch-label">Pickup branch</InputLabel>
-              <Select
-                labelId="cart-branch-label"
-                label="Pickup branch"
-                value={branchId}
-                onChange={(event) => setBranchId(event.target.value)}
-              >
-                <MenuItem value="" disabled>
-                  Choose a branch
-                </MenuItem>
-                {branches.map((branch) => (
-                  <MenuItem key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
             <Alert severity="info">
               Prices shown are estimates. The final price and stock availability
               are checked securely when you submit the order.

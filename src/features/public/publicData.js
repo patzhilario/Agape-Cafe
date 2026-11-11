@@ -125,6 +125,7 @@ function normalizeProduct(
 }
 
 async function loadPublicProducts({ branchId, featured, limit, productId } = {}) {
+  branchId = await getStoreBranchId()
   const supabase = getSupabaseClient()
   let availabilityByProduct = new Map()
 
@@ -205,8 +206,10 @@ async function loadPublicProducts({ branchId, featured, limit, productId } = {})
   )).filter(Boolean)
 }
 
-export function getPublicProducts(options = {}) {
-  return loadPublicData(getPublicProductsCacheKey(options), () => loadPublicProducts(options))
+export function getPublicProducts({ refresh = false, ...options } = {}) {
+  const key = getPublicProductsCacheKey(options)
+  if (refresh) publicDataCache.delete(key)
+  return loadPublicData(key, () => loadPublicProducts(options))
 }
 
 export async function getPublicProduct(productId, branchId) {
@@ -228,17 +231,19 @@ export function getPublicCategories() {
   })
 }
 
-export function getPublicBranches() {
+export function getPublicBranches({ refresh = false } = {}) {
+  if (refresh) publicDataCache.delete('branches')
   return loadPublicData('branches', async () => {
-    const { data, error } = await getSupabaseClient()
-      .from('branches')
-      .select('id, name, address, map_url, phone, email, operating_hours, gcash_qr_path, delivery_enabled, delivery_fee')
-      .eq('is_active', true)
-      .order('name')
-
-    if (error) throw new Error(`Could not load active branches: ${error.message}`)
-    return data
+    const { data, error } = await getSupabaseClient().rpc('get_store_branch')
+    if (error) throw new Error(`Could not load store details: ${error.message}`)
+    return data || []
   })
+}
+
+export async function getStoreBranchId() {
+  const [store] = await getPublicBranches()
+  if (!store) throw new Error('Store details are not configured yet.')
+  return store.id
 }
 
 export function getPublicPromotions() {

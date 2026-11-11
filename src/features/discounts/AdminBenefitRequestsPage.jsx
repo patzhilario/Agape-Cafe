@@ -10,11 +10,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Stack,
   Table,
   TableBody,
@@ -49,8 +45,7 @@ function getDocumentType(path) {
 
 export default function AdminBenefitRequestsPage() {
   const { account, hasPermission } = useAuth()
-  const canApprove = account.roles.includes('super_admin') || hasPermission('promotions', 'approve')
-  const [branches, setBranches] = useState([])
+  const canApprove = account.roles.includes('admin') || hasPermission('promotions', 'approve')
   const [branchId, setBranchId] = useState('')
   const [requests, setRequests] = useState([])
   const [totalRequestCount, setTotalRequestCount] = useState(0)
@@ -72,9 +67,8 @@ export default function AdminBenefitRequestsPage() {
     getAdminBranches(account)
       .then((data) => {
         if (!active) return
-        setBranches(data)
-        const assignedBranch = account.branchAssignments[0]?.branch_id
-        setBranchId((current) => current || (account.roles.includes('super_admin') ? '' : assignedBranch || ''))
+
+        setBranchId(data[0]?.id || '')
       })
       .catch((error) => {
         console.error('Unable to load branches for benefit review.', error)
@@ -162,37 +156,21 @@ export default function AdminBenefitRequestsPage() {
           <Typography variant="overline" color="primary">Agapé Café · Restricted access</Typography>
           <Typography variant="h2">PWD and Senior Citizen requests</Typography>
           <Typography color="text.secondary">
-            Review requests only for assigned branches. Open ID documents
+            Review requests for the store. Open ID documents
             through short-lived private links; approvals recalculate the unpaid
             order total transactionally and are recorded in the audit log.
           </Typography>
         </Box>
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         {successMessage && <Alert severity="success">{successMessage}</Alert>}
-        {!account.roles.includes('super_admin') && (
-          <FormControl fullWidth>
-            <InputLabel id="benefit-review-branch-label">Branch</InputLabel>
-            <Select
-              labelId="benefit-review-branch-label"
-              label="Branch"
-              value={branchId}
-              onChange={(event) => {
-                setIsLoading(true)
-                setPage(0)
-                setBranchId(event.target.value)
-              }}
-            >
-              {branches.map((branch) => <MenuItem key={branch.id} value={branch.id}>{branch.name}</MenuItem>)}
-            </Select>
-          </FormControl>
-        )}
+
         {!canApprove && (
-          <Alert severity="info">You have view access only. A Super Admin must grant Promotions approve permission to review requests.</Alert>
+          <Alert severity="info">You have view access only. An Admin must grant Promotions approve permission to review requests.</Alert>
         )}
         {isLoading ? (
           <Stack sx={{ alignItems: 'center', py: 8 }}><CircularProgress /></Stack>
         ) : !requests.length && page === 0 ? (
-          <Alert severity="info">No benefit discount requests are visible for this branch.</Alert>
+          <Alert severity="info">No benefit discount requests are visible for the store.</Alert>
         ) : (
           <TableContainer component={Paper} variant="outlined">
             <Table size="small" aria-label="Benefit discount requests" sx={{ minWidth: 850 }}>
@@ -201,7 +179,6 @@ export default function AdminBenefitRequestsPage() {
                   <TableCell>Order</TableCell>
                   <TableCell>Benefit</TableCell>
                   <TableCell>Customer</TableCell>
-                  <TableCell>Branch</TableCell>
                   <TableCell>Date</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell align="right">Details</TableCell>
@@ -213,7 +190,6 @@ export default function AdminBenefitRequestsPage() {
                     <TableCell sx={{ fontWeight: 700 }}>{request.order?.order_number || '—'}</TableCell>
                     <TableCell>{label(request.benefit_type)}</TableCell>
                     <TableCell>{request.order?.customer_name || '—'}</TableCell>
-                    <TableCell>{request.branch?.name || '—'}</TableCell>
                     <TableCell>{new Date(request.created_at).toLocaleString()}</TableCell>
                     <TableCell>
                       <Chip
@@ -247,7 +223,7 @@ export default function AdminBenefitRequestsPage() {
                 <Stack spacing={2.5}>
                   <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
                     <Stack spacing={1}>
-                      <Typography fontWeight={700}>{selectedRequest.order?.customer_name} · {selectedRequest.branch?.name}</Typography>
+                      <Typography fontWeight={700}>{selectedRequest.order?.customer_name}</Typography>
                       <Typography variant="body2" color="text.secondary">
                         Submitted {new Date(selectedRequest.created_at).toLocaleString()}
                       </Typography>

@@ -19,10 +19,13 @@ import {
 import RefreshIcon from '@mui/icons-material/Refresh'
 import PaginationControls from '../../components/PaginationControls.jsx'
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
+import { getStoreBranchId } from '../public/publicData.js'
 
 const DEFAULT_PAGE_SIZE = 10
 
 const actionDescriptions = {
+  pos_sale_completed: 'A staff member completed a counter sale and payment.',
+  pos_order_created: 'A staff member recorded a POS order.',
   account_access_updated: 'Account access and permissions were updated.',
   benefit_discount_approved: 'A PWD or senior discount request was approved.',
   benefit_discount_policy_updated: 'The discount policy was updated.',
@@ -43,8 +46,8 @@ const actionDescriptions = {
   inventory_item_deleted: 'An inventory item with no stock history was permanently deleted.',
   order_cancelled: 'An order was cancelled.',
   order_payment_recorded: 'An order payment was recorded.',
-  order_payment_proof_rejected: 'A GCash payment proof was rejected.',
-  order_payment_proof_submitted: 'A customer submitted GCash payment proof.',
+  order_payment_proof_rejected: 'An e-payment proof was rejected.',
+  order_payment_proof_submitted: 'A customer submitted e-payment proof.',
   order_status_updated: 'An order status was updated.',
   product_created: 'A product was created in the menu.',
   product_updated: 'A product was updated in the menu.',
@@ -152,7 +155,7 @@ export default function AdminAuditPage() {
 
   useEffect(() => {
     let active = true
-    getSupabaseClient()
+    getStoreBranchId().then((storeId) => getSupabaseClient()
       .from('audit_logs')
       .select(`
         id, action, record_type, details, created_at,
@@ -161,7 +164,8 @@ export default function AdminAuditPage() {
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
-      .range(page * pageSize, (page + 1) * pageSize - 1)
+      .or(`branch_id.is.null,branch_id.eq.${storeId}`)
+      .range(page * pageSize, (page + 1) * pageSize - 1))
       .then(({ data, error, count }) => {
         if (error) throw new Error(error.message)
         if (active) {
@@ -224,7 +228,6 @@ export default function AdminAuditPage() {
                   <TableCell>Action</TableCell>
                   <TableCell>Record</TableCell>
                   <TableCell>Administrator</TableCell>
-                  <TableCell>Branch</TableCell>
                   <TableCell>Description and details</TableCell>
                 </TableRow>
               </TableHead>
@@ -237,7 +240,6 @@ export default function AdminAuditPage() {
                       <TableCell><Chip size="small" color="primary" variant="outlined" label={label(log.action)} /></TableCell>
                       <TableCell>{label(log.record_type)}</TableCell>
                       <TableCell>{log.actor?.display_name || log.actor?.email || 'System'}</TableCell>
-                      <TableCell>{log.branch?.name || '—'}</TableCell>
                       <TableCell sx={{ whiteSpace: 'normal', minWidth: 300 }}>
                         <Typography variant="body2">
                           {actionDescriptions[log.action] || `${label(log.action)}.`}

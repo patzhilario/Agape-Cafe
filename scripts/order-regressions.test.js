@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
 import { formatOrderDate } from '../src/features/orders/formatOrderDate.js'
+import { validatePaymentReceipt } from '../src/features/orders/paymentReceipt.js'
+import { formatOrderStatus } from '../src/features/orders/orderStatus.js'
 
 const source = await readFile(new URL('../src/features/orders/orderData.js', import.meta.url), 'utf8')
 
@@ -22,7 +24,7 @@ function loadOrderData(response) {
   })
   vm.runInContext(
     source.replace(/^import .*\r?\n/, '').replaceAll('export async function', 'async function') +
-      '\nthis.api = { getCustomerOrder, getCustomerOrders, createCustomerOrder }',
+      '\nthis.api = { getCustomerOrder, getCustomerOrders, createCustomerOrder, submitOrderPaymentProof }',
     context,
   )
   return { ...context.api, calls }
@@ -59,13 +61,15 @@ test('database read errors reject instead of producing incomplete orders', async
   await assert.rejects(api.getCustomerOrders(), /Could not load your orders: Connection failed/)
 })
 
-test('checkout preserves actionable table and payment rejection messages', async () => {
+test('checkout preserves actionable order type and payment rejection messages', async () => {
   for (const message of [
-    'That table has just been reserved. Refresh the table list and choose another.',
-    'Choose an active payment method configured for this branch.',
+    'Choose Dine-in, Pick-up, or Delivery.',
+    'Choose an active payment method configured for the store.',
     'Pick-up and delivery orders require an online QR payment method.',
+    'All orders require an active e-payment method with a QR code.',
+    'Delivery fee changed. Review the updated total. If you already paid, contact the store before submitting.',
   ]) {
-    const api = loadOrderData({ data: null, error: { code: 'P0001', message } })
+    const api = loadOrderData({ data: null, error: { code: 'P0001', message: message.startsWith("Choose an active payment method") ? message.replace("the store", "this branch") : message } })
     await assert.rejects(api.createCustomerOrder({ items: [] }), (error) => error.message === message)
   }
 })
@@ -81,4 +85,39 @@ test('missing and invalid dates do not crash rendering', () => {
     assert.equal(formatOrderDate(value), 'Date unavailable')
   }
   assert.notEqual(formatOrderDate('2026-11-09T05:00:00Z'), 'Date unavailable')
+})
+
+test('receipt submission no longer requires a typed payment reference', async () => {
+  const api = loadOrderData({ data: 'proof-1', error: null })
+  assert.equal(await api.submitOrderPaymentProof('order-1', 'customer/order-1/receipt.jpg'), 'proof-1')
+  const call = api.calls.find(([method]) => method === 'rpc')
+  assert.equal(call[1], 'submit_order_payment_proof')
+  assert.equal(call[2].payment_reference_number, null)
+})
+
+test('receipt validation accepts JPEG and rejects PDFs, other formats and renamed files', async () => {
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
+  await validatePaymentReceipt(new File([jpeg], 'receipt.jpeg', { type: 'image/jpeg' }))
+  for (const file of [
+    new File(['%PDF-1.7'], 'receipt.pdf', { type: 'application/pdf' }),
+    new File(['PNG'], 'receipt.png', { type: 'image/png' }),
+    new File(['%PDF-1.7'], 'renamed.jpg', { type: 'image/jpeg' }),
+    new File([jpeg], 'receipt.pdf', { type: 'image/jpeg' }),
+  ]) await assert.rejects(validatePaymentReceipt(file), /JPEG/)
+  await assert.rejects(validatePaymentReceipt(new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.jpg', { type: 'image/jpeg' })), /10 MB/)
+})
+
+test('order status labels use the requested preparing and ready wording', () => {
+  assert.equal(formatOrderStatus('preparing'), 'Orders preparing')
+  assert.equal(formatOrderStatus('ready'), 'Orders Ready')
+  assert.equal(formatOrderStatus('completed'), 'Completed')
+})
+
+test('delivery checkout submits the displayed fee for a server-side price check', async () => {
+  const api = loadOrderData({ data: 'order-1', error: null })
+  await api.createCustomerOrder({ fulfillment: 'delivery', deliveryAddress: '123 Main Street', expectedDeliveryFee: 50, items: [] })
+  const call = api.calls.find(([method]) => method === 'rpc')
+  assert.equal(call[1], 'create_store_order')
+  assert.equal(call[2].expected_delivery_fee, 50)
+  assert.equal(call[2].customer_delivery_address, '123 Main Street')
 })

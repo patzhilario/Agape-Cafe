@@ -1,7 +1,7 @@
 -- Agape Cafe full database setup
 -- For a fresh Supabase project only. Run this file instead of the individual migration files.
 -- Do not rerun on a project where these migrations have already been applied.
--- Provision the initial Super Admin separately using provision_initial_super_admin.sql.
+-- Provision the initial Admin separately using provision_initial_admin.sql.
 -- ============================================================================
 -- Migration: 20261019000000_foundation.sql
 -- ============================================================================
@@ -8191,10 +8191,6 @@ begin
   delete from public.pending_user_access
   where email = lower(target_email);
 
-  begin
-    delete from auth.users
-    where id = target_user_id;
-  exception when foreign_key_violation then
   delete from auth.users
   where id = target_user_id;
 
@@ -8288,3 +8284,1675 @@ revoke all on function public.delete_branch_dining_table(uuid, uuid) from public
 grant execute on function public.delete_branch_dining_table(uuid, uuid) to authenticated;
 
 notify pgrst, 'reload schema';
+
+-- ============================================================================
+-- Migration: 20261111000000_simplify_account_roles.sql
+-- ============================================================================
+begin;
+
+-- Keep catalog-deparsed function and policy references schema-qualified.
+set local search_path = pg_catalog;
+
+lock table public.pending_user_access, public.user_roles in access exclusive mode;
+
+-- An account may already have both branch roles. Keep its existing Staff grant.
+delete from public.user_roles as branch_grant
+using public.user_roles as staff_grant
+where branch_grant.user_id = staff_grant.user_id
+  and branch_grant.role = 'branch_admin'
+  and staff_grant.role = 'staff';
+
+alter type public.app_role rename to legacy_app_role;
+create type public.app_role as enum ('admin', 'staff', 'customer');
+
+alter table public.pending_user_access
+  drop constraint pending_user_access_check;
+
+alter table public.user_roles alter column role type public.app_role using (
+  case role::text when 'super_admin' then 'admin'
+    when 'branch_admin' then 'staff' else role::text end
+)::public.app_role;
+
+alter table public.pending_user_access
+  alter column role type public.app_role using (
+    case role::text when 'super_admin' then 'admin'
+      when 'branch_admin' then 'staff' else role::text end
+  )::public.app_role,
+  add constraint pending_user_access_check check (
+    (role = 'staff' and cardinality(branch_ids) > 0)
+    or (role in ('customer', 'admin')
+      and cardinality(branch_ids) = 0
+      and cardinality(permission_ids) = 0)
+  );
+
+alter function public.has_role(public.legacy_app_role) rename to has_legacy_role;
+
+create function public.has_role(required_role public.app_role)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select public.is_active_account()
+    and exists (
+      select 1
+      from public.user_roles
+      where user_id = (select auth.uid())
+        and role = required_role
+    );
+$$;
+
+revoke all on function public.has_role(public.app_role) from public, anon, authenticated;
+grant execute on function public.has_role(public.app_role) to anon, authenticated;
+
+-- Rebind policies to the new signature while retaining their commands and grantees.
+do $$
+declare
+  policy record;
+  using_clause text;
+  check_clause text;
+begin
+  for policy in
+    select p.polname, p.polrelid::regclass as relation,
+      pg_get_expr(p.polqual, p.polrelid) as using_expression,
+      pg_get_expr(p.polwithcheck, p.polrelid) as check_expression
+    from pg_policy as p
+    where exists (
+      select 1 from pg_depend as d
+      where d.classid = 'pg_policy'::regclass and d.objid = p.oid
+        and d.refclassid = 'pg_proc'::regclass
+        and d.refobjid = 'public.has_legacy_role(public.legacy_app_role)'::regprocedure
+    )
+  loop
+    using_clause := replace(replace(policy.using_expression,
+      'public.has_legacy_role(', 'public.has_role('),
+      '''super_admin''::public.legacy_app_role', '''admin''::public.app_role');
+    check_clause := replace(replace(policy.check_expression,
+      'public.has_legacy_role(', 'public.has_role('),
+      '''super_admin''::public.legacy_app_role', '''admin''::public.app_role');
+
+    execute format('alter policy %I on %s%s%s', policy.polname, policy.relation,
+      coalesce(' using (' || using_clause || ')', ''),
+      coalesce(' with check (' || check_clause || ')', ''));
+  end loop;
+end;
+$$;
+
+-- Update role checks in installed routines, including the access RPC signatures.
+-- Use the installed bodies so both the standalone and combined setups keep their business logic.
+do $$
+declare
+  definition text;
+begin
+  for definition in
+    select pg_get_functiondef(p.oid)
+    from pg_proc as p
+    join pg_namespace as n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.prokind = 'f'
+      and p.proname not in ('handle_new_auth_user', 'has_legacy_role')
+      and p.prosrc like '%''super_admin''%'
+  loop
+    definition := replace(definition, 'public.legacy_app_role', 'public.app_role');
+    definition := replace(definition, 'in (''branch_admin'', ''staff'')', '= ''staff''');
+    definition := replace(definition, 'Branch administrators and staff must be', 'Staff must be');
+    definition := replace(definition, 'a Super Admin', 'an Admin');
+    definition := replace(definition, 'A Super Admin', 'An Admin');
+    definition := replace(definition, 'Super Admin', 'Admin');
+    definition := replace(definition, 'super admins', 'admins');
+    definition := replace(definition, 'super_admin', 'admin');
+    execute definition;
+  end loop;
+end;
+$$;
+
+drop function public.admin_invite_user_access(text, text, public.legacy_app_role, uuid[], uuid[]);
+drop function public.admin_set_staff_access(uuid, public.legacy_app_role, uuid[], uuid[]);
+drop function public.has_legacy_role(public.legacy_app_role);
+drop type public.legacy_app_role;
+
+revoke all on function public.admin_set_staff_access(uuid, public.app_role, uuid[], uuid[])
+  from public, anon, authenticated;
+grant execute on function public.admin_set_staff_access(uuid, public.app_role, uuid[], uuid[])
+  to authenticated;
+
+revoke all on function public.admin_invite_user_access(text, text, public.app_role, uuid[], uuid[])
+  from public, anon, authenticated;
+grant execute on function public.admin_invite_user_access(text, text, public.app_role, uuid[], uuid[])
+  to authenticated;
+
+-- Carry forward an unclaimed initial Admin setup from the old provisioning script.
+do $$
+begin
+  if to_regclass('public.initial_super_admin_config') is not null
+    and not exists (select 1 from public.user_roles where role = 'admin') then
+    insert into public.pending_user_access (email, display_name, role)
+    select config.email, 'Admin', 'admin'
+    from public.initial_super_admin_config as config
+    where not exists (select 1 from auth.users where lower(email) = config.email)
+    on conflict (email) do update
+    set role = excluded.role, branch_ids = '{}', permission_ids = '{}';
+  end if;
+end;
+$$;
+
+create or replace function public.handle_new_auth_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  full_name text;
+  pending_access public.pending_user_access%rowtype;
+  has_pending_access boolean;
+begin
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(coalesce(lower(btrim(new.email)), ''), 0)
+  );
+
+  select *
+  into pending_access
+  from public.pending_user_access
+  where email = lower(btrim(new.email))
+  for update;
+  has_pending_access := found;
+
+  full_name := coalesce(
+    case when has_pending_access then pending_access.display_name end,
+    new.raw_user_meta_data ->> 'full_name',
+    new.raw_user_meta_data ->> 'name',
+    ''
+  );
+
+  insert into public.profiles (id, email, display_name, avatar_path)
+  values (
+    new.id,
+    new.email,
+    full_name,
+    new.raw_user_meta_data ->> 'avatar_url'
+  );
+
+  if has_pending_access then
+    insert into public.user_roles (user_id, role, granted_by)
+    values (new.id, pending_access.role, pending_access.invited_by);
+
+    if pending_access.role = 'staff' then
+      insert into public.user_branch_assignments (user_id, branch_id, assigned_by)
+      select new.id, requested.branch_id, pending_access.invited_by
+      from unnest(pending_access.branch_ids) as requested(branch_id);
+
+      insert into public.user_permissions (user_id, branch_id, permission_id, granted_by)
+      select new.id, requested_branch.branch_id,
+        requested_permission.permission_id, pending_access.invited_by
+      from unnest(pending_access.branch_ids) as requested_branch(branch_id)
+      cross join unnest(pending_access.permission_ids) as requested_permission(permission_id);
+    end if;
+
+    insert into public.audit_logs (
+      actor_id,
+      action,
+      record_type,
+      record_id,
+      details
+    )
+    values (
+      pending_access.invited_by,
+      'invited_account_registered',
+      'profile',
+      new.id,
+      jsonb_build_object(
+        'email', lower(btrim(new.email)),
+        'role', pending_access.role,
+        'branch_ids', pending_access.branch_ids,
+        'permission_ids', pending_access.permission_ids
+      )
+    );
+
+    delete from public.pending_user_access
+    where email = pending_access.email;
+  else
+    insert into public.user_roles (user_id, role)
+    values (new.id, 'customer');
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.handle_new_auth_user() from public, anon, authenticated;
+
+notify pgrst, 'reload schema';
+
+commit;
+
+-- ============================================================================
+-- Migration: 20261111010000_email_password_signup.sql
+-- ============================================================================
+begin;
+
+create or replace function public.handle_new_auth_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  full_name text;
+  pending_access public.pending_user_access%rowtype;
+  has_pending_access boolean;
+begin
+  -- Google can sign in or link to an existing account. A new account must
+  -- be registered through email/password before it can use Google login.
+  if new.raw_app_meta_data ->> 'provider' = 'google'
+    or (new.raw_app_meta_data -> 'providers') ? 'google' then
+    raise exception 'Create an account with email and password before using Google login.';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(coalesce(lower(btrim(new.email)), ''), 0)
+  );
+
+  select *
+  into pending_access
+  from public.pending_user_access
+  where email = lower(btrim(new.email))
+  for update;
+  has_pending_access := found;
+
+  full_name := coalesce(
+    case when has_pending_access then pending_access.display_name end,
+    new.raw_user_meta_data ->> 'full_name',
+    new.raw_user_meta_data ->> 'name',
+    ''
+  );
+
+  insert into public.profiles (id, email, display_name, avatar_path, phone, address)
+  values (
+    new.id,
+    new.email,
+    full_name,
+    new.raw_user_meta_data ->> 'avatar_url',
+    nullif(left(btrim(new.raw_user_meta_data ->> 'signup_phone'), 40), ''),
+    nullif(left(btrim(new.raw_user_meta_data ->> 'signup_address'), 500), '')
+  );
+
+  if has_pending_access then
+    insert into public.user_roles (user_id, role, granted_by)
+    values (new.id, pending_access.role, pending_access.invited_by);
+
+    if pending_access.role = 'staff' then
+      insert into public.user_branch_assignments (user_id, branch_id, assigned_by)
+      select new.id, requested.branch_id, pending_access.invited_by
+      from unnest(pending_access.branch_ids) as requested(branch_id);
+
+      insert into public.user_permissions (user_id, branch_id, permission_id, granted_by)
+      select new.id, requested_branch.branch_id,
+        requested_permission.permission_id, pending_access.invited_by
+      from unnest(pending_access.branch_ids) as requested_branch(branch_id)
+      cross join unnest(pending_access.permission_ids) as requested_permission(permission_id);
+    end if;
+
+    insert into public.audit_logs (
+      actor_id,
+      action,
+      record_type,
+      record_id,
+      details
+    )
+    values (
+      pending_access.invited_by,
+      'invited_account_registered',
+      'profile',
+      new.id,
+      jsonb_build_object(
+        'email', lower(btrim(new.email)),
+        'role', pending_access.role,
+        'branch_ids', pending_access.branch_ids,
+        'permission_ids', pending_access.permission_ids
+      )
+    );
+
+    delete from public.pending_user_access
+    where email = pending_access.email;
+  else
+    insert into public.user_roles (user_id, role)
+    values (new.id, 'customer');
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.handle_new_auth_user() from public, anon, authenticated;
+
+commit;
+
+-- ============================================================================
+-- Migration: 20261111020000_signup_identity_fields.sql
+-- ============================================================================
+begin;
+
+-- Existing profiles keep their saved display names and email login.
+alter table public.profiles
+  add column username text check (
+    username is null or username ~ '^[a-z0-9][a-z0-9_.]{2,29}$'
+  ),
+  add column first_name text check (first_name is null or length(btrim(first_name)) between 1 and 60),
+  add column last_name text check (last_name is null or length(btrim(last_name)) between 1 and 60),
+  add column middle_initial text check (middle_initial is null or middle_initial ~ '^[[:alpha:]]$');
+
+create unique index profiles_username_key on public.profiles (username);
+
+-- Expose availability without exposing an account's email or profile.
+create function public.is_username_available(requested_username text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(lower(btrim(requested_username)) ~ '^[a-z0-9][a-z0-9_.]{2,29}$', false)
+    and not exists (
+      select 1 from public.profiles where username = lower(btrim(requested_username))
+    );
+$$;
+
+revoke all on function public.is_username_available(text) from public, anon, authenticated;
+grant execute on function public.is_username_available(text) to anon, authenticated;
+
+create or replace function public.handle_new_auth_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  full_name text;
+  pending_access public.pending_user_access%rowtype;
+  has_pending_access boolean;
+  requested_username text := lower(btrim(new.raw_user_meta_data ->> 'username'));
+  requested_first_name text := btrim(new.raw_user_meta_data ->> 'first_name');
+  requested_last_name text := btrim(new.raw_user_meta_data ->> 'last_name');
+  requested_middle_initial text := nullif(upper(btrim(new.raw_user_meta_data ->> 'middle_initial')), '');
+  requested_phone text := btrim(new.raw_user_meta_data ->> 'signup_phone');
+begin
+  -- Google can sign in or link to an existing account. A new account must
+  -- be registered through email/password before it can use Google login.
+  if new.raw_app_meta_data ->> 'provider' = 'google'
+    or (new.raw_app_meta_data -> 'providers') ? 'google' then
+    raise exception 'Create an account with email and password before using Google login.';
+  end if;
+
+  if requested_username is null
+      or requested_username !~ '^[a-z0-9][a-z0-9_.]{2,29}$' then
+    raise exception 'Enter a valid username with 3 to 30 characters.';
+  end if;
+  if requested_first_name is null or length(requested_first_name) not between 1 and 60
+      or requested_last_name is null or length(requested_last_name) not between 1 and 60 then
+    raise exception 'First name and last name are required, with up to 60 characters each.';
+  end if;
+  if requested_middle_initial is not null and requested_middle_initial !~ '^[[:alpha:]]$' then
+    raise exception 'Enter one letter for the optional middle initial.';
+  end if;
+  if requested_phone is null or length(requested_phone) not between 1 and 40 then
+    raise exception 'A phone number is required, with up to 40 characters.';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(coalesce(lower(btrim(new.email)), ''), 0)
+  );
+
+  select *
+  into pending_access
+  from public.pending_user_access
+  where email = lower(btrim(new.email))
+  for update;
+  has_pending_access := found;
+
+  full_name := concat_ws(' ', requested_first_name,
+    case when requested_middle_initial is not null then requested_middle_initial || '.' end,
+    requested_last_name);
+
+  insert into public.profiles (
+    id, email, display_name, avatar_path, phone, address,
+    username, first_name, last_name, middle_initial
+  )
+  values (
+    new.id, new.email, full_name, new.raw_user_meta_data ->> 'avatar_url',
+    requested_phone,
+    nullif(left(btrim(new.raw_user_meta_data ->> 'signup_address'), 500), ''),
+    requested_username, requested_first_name, requested_last_name, requested_middle_initial
+  );
+
+  if has_pending_access then
+    insert into public.user_roles (user_id, role, granted_by)
+    values (new.id, pending_access.role, pending_access.invited_by);
+
+    if pending_access.role = 'staff' then
+      insert into public.user_branch_assignments (user_id, branch_id, assigned_by)
+      select new.id, requested.branch_id, pending_access.invited_by
+      from unnest(pending_access.branch_ids) as requested(branch_id);
+
+      insert into public.user_permissions (user_id, branch_id, permission_id, granted_by)
+      select new.id, requested_branch.branch_id,
+        requested_permission.permission_id, pending_access.invited_by
+      from unnest(pending_access.branch_ids) as requested_branch(branch_id)
+      cross join unnest(pending_access.permission_ids) as requested_permission(permission_id);
+    end if;
+
+    insert into public.audit_logs (
+      actor_id,
+      action,
+      record_type,
+      record_id,
+      details
+    )
+    values (
+      pending_access.invited_by,
+      'invited_account_registered',
+      'profile',
+      new.id,
+      jsonb_build_object(
+        'email', lower(btrim(new.email)),
+        'role', pending_access.role,
+        'branch_ids', pending_access.branch_ids,
+        'permission_ids', pending_access.permission_ids
+      )
+    );
+
+    delete from public.pending_user_access
+    where email = pending_access.email;
+  else
+    insert into public.user_roles (user_id, role)
+    values (new.id, 'customer');
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.handle_new_auth_user() from public, anon, authenticated;
+
+notify pgrst, 'reload schema';
+
+commit;
+
+-- ============================================================================
+-- Migration: 20261111030000_customer_profile_settings.sql
+-- ============================================================================
+-- Existing profile RLS limits updates to the signed-in account and Admins.
+grant update (username, first_name, last_name, middle_initial)
+on public.profiles to authenticated;
+
+notify pgrst, 'reload schema';
+
+-- ============================================================================
+-- Migration: 20261111040000_single_store_orders.sql
+-- ============================================================================
+begin;
+
+create table public.store_settings (
+  singleton boolean primary key default true check (singleton),
+  branch_id uuid not null unique references public.branches(id) on delete restrict
+);
+alter table public.store_settings enable row level security;
+create policy "Everyone can read the store location"
+on public.store_settings for select to anon, authenticated using (true);
+revoke all on public.store_settings from public, anon, authenticated;
+grant select on public.store_settings to anon, authenticated;
+
+do $$
+declare
+  selected_store uuid;
+begin
+  select id into selected_store
+  from public.branches
+  where name ilike '%calamba%'
+  order by is_active desc, created_at, id
+  limit 1;
+
+  if selected_store is null then
+    select id into selected_store
+    from public.branches
+    where name not ilike '%batangas%'
+    order by is_active desc, created_at, id
+    limit 1;
+  end if;
+
+  if selected_store is null then
+    insert into public.branches (name, address, is_active)
+    values ('Agape Cafe', '', true)
+    returning id into selected_store;
+  end if;
+
+  insert into public.store_settings (branch_id) values (selected_store);
+end;
+$$;
+
+create function public.get_store_branch_id()
+returns uuid
+language sql stable security definer set search_path = ''
+as $$
+  select branch_id from public.store_settings where singleton;
+$$;
+revoke all on function public.get_store_branch_id() from public, anon, authenticated;
+grant execute on function public.get_store_branch_id() to anon, authenticated;
+
+create function public.get_store_branch()
+returns setof public.branches
+language sql stable security definer set search_path = ''
+as $$
+  select branch.* from public.branches as branch
+  where branch.id = public.get_store_branch_id();
+$$;
+revoke all on function public.get_store_branch() from public, anon, authenticated;
+grant execute on function public.get_store_branch() to anon, authenticated;
+
+-- Archive the other locations. Historical orders and inventory retain their references.
+update public.branches
+set is_active = (id = public.get_store_branch_id());
+
+alter table public.branches add constraint branches_single_active_store
+check (not is_active or id = public.get_store_branch_id());
+
+revoke insert, delete on public.branches from authenticated;
+drop policy if exists "Super admins can manage branches" on public.branches;
+create policy "Admins can update the store"
+on public.branches for update to authenticated
+using (id = public.get_store_branch_id() and public.has_role('admin'))
+with check (id = public.get_store_branch_id() and public.has_role('admin'));
+
+lock table public.user_roles, public.user_branch_assignments,
+  public.user_permissions, public.pending_user_access in share row exclusive mode;
+
+insert into public.user_branch_assignments (user_id, branch_id)
+select distinct user_id, public.get_store_branch_id()
+from public.user_roles where role = 'staff'
+on conflict (user_id, branch_id) do nothing;
+
+insert into public.user_permissions (user_id, branch_id, permission_id, granted_by)
+select permission.user_id, public.get_store_branch_id(),
+  permission.permission_id, permission.granted_by
+from public.user_permissions as permission
+join public.user_branch_assignments as assignment
+  on assignment.user_id = permission.user_id
+  and assignment.branch_id = public.get_store_branch_id()
+where permission.branch_id <> public.get_store_branch_id()
+on conflict (user_id, branch_id, permission_id) do nothing;
+
+delete from public.user_branch_assignments
+where branch_id <> public.get_store_branch_id();
+
+update public.pending_user_access
+set branch_ids = array[public.get_store_branch_id()]
+where role = 'staff';
+
+-- Access management always assigns Staff to the one store.
+do $$
+declare
+  definition text;
+begin
+  for definition in
+    select pg_get_functiondef(p.oid)
+    from pg_proc as p join pg_namespace as n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in ('admin_set_staff_access', 'admin_invite_user_access')
+  loop
+    definition := replace(definition,
+      'requested_branches uuid[] := coalesce(branch_ids, array[]::uuid[]);',
+      'requested_branches uuid[] := case when new_role = ''staff'' then array[public.get_store_branch_id()] else array[]::uuid[] end;');
+    execute definition;
+  end loop;
+end;
+$$;
+
+-- Retire dining-table configuration and retain only its historical references.
+update public.branch_dining_tables set is_active = false, deleted_at = coalesce(deleted_at, now());
+drop trigger if exists orders_guard_dining_table_assignment on public.orders;
+drop index if exists public.orders_one_active_dine_in_order_per_table;
+revoke all on public.branch_dining_tables from anon, authenticated;
+revoke all on function public.get_available_dining_tables(uuid) from public, anon, authenticated;
+revoke all on function public.delete_branch_dining_table(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.create_customer_order_with_table(
+  uuid, public.order_fulfillment_method, uuid, uuid, text, text, uuid, jsonb,
+  uuid, public.benefit_type, jsonb, text, text, uuid
+) from public, anon, authenticated;
+
+create function public.enforce_store_order()
+returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.branch_id is distinct from public.get_store_branch_id() then
+      raise exception 'Orders must belong to the store.';
+    end if;
+    if new.fulfillment_method not in ('dine_in', 'pickup', 'delivery') then
+      raise exception 'Choose Dine-in, Pick-up, or Delivery.';
+    end if;
+    if new.dining_table_id is not null then
+      raise exception 'Table numbers are no longer used.';
+    end if;
+  else
+    if new.branch_id is distinct from old.branch_id
+      and new.branch_id is distinct from public.get_store_branch_id() then
+      raise exception 'Orders must belong to the store.';
+    end if;
+    if new.fulfillment_method is distinct from old.fulfillment_method
+      and new.fulfillment_method not in ('dine_in', 'pickup', 'delivery') then
+      raise exception 'Choose Dine-in, Pick-up, or Delivery.';
+    end if;
+    if new.dining_table_id is distinct from old.dining_table_id
+      and new.dining_table_id is not null then
+      raise exception 'Table numbers are no longer used.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger orders_enforce_store
+before insert or update of branch_id, fulfillment_method, dining_table_id
+on public.orders for each row execute function public.enforce_store_order();
+
+create or replace function public.create_store_order(
+  fulfillment public.order_fulfillment_method,
+  payment_method_id uuid,
+  client_request_id uuid,
+  customer_phone text,
+  customer_note text,
+  requested_promotion_id uuid,
+  cart_items jsonb,
+  target_benefit_request_id uuid default null,
+  requested_benefit_type public.benefit_type default null,
+  requested_benefit_items jsonb default null,
+  uploaded_benefit_document_path text default null,
+  customer_delivery_address text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := (select auth.uid());
+  target_branch_id uuid := public.get_store_branch_id();
+  current_order public.orders%rowtype;
+  created_order_id uuid;
+  is_replay boolean := false;
+  legacy_delivery_fee numeric(12, 2) := 0;
+begin
+  if current_user_id is null or not public.is_active_account() then
+    raise exception 'Sign in with an active account to place an order.'
+      using errcode = '42501';
+  end if;
+
+  if fulfillment is null or fulfillment not in ('dine_in', 'pickup', 'delivery') then
+    raise exception 'Choose Dine-in, Pick-up, or Delivery.';
+  end if;
+  if target_benefit_request_id is not null and fulfillment <> 'dine_in' then
+    raise exception 'Benefit discounts are available for Dine-in orders.';
+  end if;
+
+  select * into current_order
+  from public.orders
+  where customer_id = current_user_id
+    and orders.client_request_id = create_store_order.client_request_id
+  for update;
+  is_replay := found;
+
+  if is_replay and (
+    current_order.branch_id is distinct from target_branch_id
+    or current_order.fulfillment_method is distinct from fulfillment
+    or current_order.delivery_address is distinct from nullif(btrim(customer_delivery_address), '')
+  ) then
+    raise exception 'This order submission key was already used for different fulfillment details.';
+  end if;
+
+  created_order_id := public.create_customer_order_with_benefit(
+    target_branch_id,
+    fulfillment,
+    payment_method_id,
+    client_request_id,
+    customer_phone,
+    customer_note,
+    requested_promotion_id,
+    cart_items,
+    target_benefit_request_id,
+    requested_benefit_type,
+    requested_benefit_items,
+    uploaded_benefit_document_path,
+    customer_delivery_address
+  );
+
+  if not is_replay and fulfillment = 'delivery' then
+    select delivery_fee into legacy_delivery_fee
+    from public.orders
+    where id = created_order_id
+    for update;
+
+    if coalesce(legacy_delivery_fee, 0) > 0 then
+      update public.orders
+      set total = total - legacy_delivery_fee,
+          delivery_fee = 0
+      where id = created_order_id;
+
+      update public.payments
+      set amount = amount - legacy_delivery_fee
+      where order_id = created_order_id;
+    end if;
+  end if;
+
+  return created_order_id;
+end;
+$$;
+
+revoke all on function public.create_store_order(
+  public.order_fulfillment_method, uuid, uuid, text, text, uuid, jsonb,
+  uuid, public.benefit_type, jsonb, text, text
+) from public, anon, authenticated;
+grant execute on function public.create_store_order(
+  public.order_fulfillment_method, uuid, uuid, text, text, uuid, jsonb,
+  uuid, public.benefit_type, jsonb, text, text
+) to authenticated;
+
+notify pgrst, 'reload schema';
+commit;
+
+-- E-payment only for all new orders.
+begin;
+
+-- Keep historical payment references, but retire cash and unconfigured methods.
+update public.payment_methods
+set is_active = false
+where settlement_type <> 'provider'
+   or nullif(btrim(qr_code_path), '') is null;
+
+alter table public.payment_methods
+  add constraint payment_methods_active_epayment_only
+  check (
+    not is_active
+    or (settlement_type = 'provider' and nullif(btrim(qr_code_path), '') is not null)
+  );
+
+-- This guard covers every order type and every API that creates a payment.
+-- Status-only updates to historical payments remain possible.
+create or replace function public.enforce_fulfillment_payment_method()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  order_branch_id uuid;
+begin
+  select branch_id into order_branch_id
+  from public.orders where id = new.order_id;
+  if not found then
+    raise exception 'Payment must belong to an existing order.';
+  end if;
+
+  if not exists (
+    select 1 from public.payment_methods as method
+    where method.id = new.payment_method_id
+      and method.branch_id = order_branch_id
+      and method.is_active
+      and method.settlement_type = 'provider'
+      and nullif(btrim(method.qr_code_path), '') is not null
+  ) then
+    raise exception 'All orders require an active e-payment method with a QR code.';
+  end if;
+  return new;
+end;
+$$;
+
+notify pgrst, 'reload schema';
+commit;
+
+-- Delivery-only ordering.
+begin;
+
+update public.branches
+set delivery_enabled = true
+where id = public.get_store_branch_id();
+
+alter table public.branches add constraint store_delivery_required
+check (id <> public.get_store_branch_id() or delivery_enabled);
+
+create or replace function public.enforce_store_order()
+returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.branch_id is distinct from public.get_store_branch_id() then
+      raise exception 'Orders must belong to the store.';
+    end if;
+    if new.fulfillment_method is distinct from 'delivery'::public.order_fulfillment_method then
+      raise exception 'Only delivery orders are available.';
+    end if;
+    if new.dining_table_id is not null then
+      raise exception 'Table numbers are no longer used.';
+    end if;
+  else
+    if new.branch_id is distinct from old.branch_id
+      and new.branch_id is distinct from public.get_store_branch_id() then
+      raise exception 'Orders must belong to the store.';
+    end if;
+    if new.fulfillment_method is distinct from old.fulfillment_method
+      and new.fulfillment_method is distinct from 'delivery'::public.order_fulfillment_method then
+      raise exception 'Only delivery orders are available.';
+    end if;
+    if new.dining_table_id is distinct from old.dining_table_id
+      and new.dining_table_id is not null then
+      raise exception 'Table numbers are no longer used.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+-- Preserve the RPC signature, validation, totals and retry behavior.
+do $$
+declare
+  definition text;
+  previous_validation text := 'if fulfillment is null or fulfillment not in (''dine_in'', ''pickup'', ''delivery'') then';
+begin
+  select pg_get_functiondef(oid) into definition
+  from pg_proc
+  where oid = 'public.create_store_order(public.order_fulfillment_method,uuid,uuid,text,text,uuid,jsonb,uuid,public.benefit_type,jsonb,text,text)'::regprocedure;
+  if position(previous_validation in definition) = 0 then
+    raise exception 'The single-store checkout migration must be applied before delivery-only ordering.';
+  end if;
+  definition := replace(definition, previous_validation,
+    'if fulfillment is distinct from ''delivery''::public.order_fulfillment_method then');
+  definition := replace(definition, 'Choose Dine-in, Pick-up, or Delivery.',
+    'Only delivery orders are available.');
+  execute definition;
+end;
+$$;
+
+-- Delivery drinks use disposable cups, including carts saved before this change.
+create function public.set_delivery_drink_container()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if exists (
+    select 1
+    from public.orders as order_record
+    join public.products as product on product.id = new.product_id
+    join public.categories as category on category.id = product.category_id
+    where order_record.id = new.order_id
+      and order_record.fulfillment_method = 'delivery'
+      and category.type = 'drink'
+  ) then
+    new.serving_type := 'cup';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.set_delivery_drink_container() from public, anon, authenticated;
+create trigger order_items_delivery_container
+before insert on public.order_items
+for each row execute function public.set_delivery_drink_container();
+
+notify pgrst, 'reload schema';
+commit;
+
+-- JPEG receipts and customer order notifications.
+begin;
+
+update storage.buckets
+set allowed_mime_types = array['image/jpeg'], file_size_limit = 10485760
+where id = 'order-payment-proofs';
+
+-- Reference typing is optional; JPEG ownership and receipt checks remain required.
+create or replace function public.submit_order_payment_proof(
+  target_order_id uuid,
+  uploaded_document_path text,
+  payment_reference_number text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := (select auth.uid());
+  current_order public.orders%rowtype;
+  current_payment public.payments%rowtype;
+  current_method public.payment_methods%rowtype;
+  proof_id uuid;
+  current_proof public.order_payment_proofs%rowtype;
+begin
+  if current_user_id is null or not public.is_active_account() then
+    raise exception 'Sign in with an active account to submit payment proof.'
+      using errcode = '42501';
+  end if;
+  if payment_reference_number is not null
+      and length(btrim(payment_reference_number)) not between 4 and 50 then
+    raise exception 'Enter a payment reference number between 4 and 50 characters.';
+  end if;
+
+  select * into current_order
+  from public.orders
+  where id = target_order_id and customer_id = current_user_id
+  for update;
+  if not found then raise exception 'This order is not available to your account.'; end if;
+  if current_order.payment_status <> 'unpaid'
+      or current_order.status in ('cancelled', 'completed') then
+    raise exception 'Payment proof can only be submitted for an active unpaid order.';
+  end if;
+  if exists (
+    select 1 from public.benefit_discount_requests
+    where order_id = target_order_id and status = 'pending'
+  ) then
+    raise exception 'Wait for staff to verify your benefit discount before paying the updated total.';
+  end if;
+
+  select payment.* into current_payment
+  from public.payments as payment
+  where payment.order_id = target_order_id;
+  if not found then raise exception 'Payment transaction not found.'; end if;
+
+  select method.* into current_method
+  from public.payment_methods as method
+  where method.id = current_payment.payment_method_id;
+  if not found or current_method.settlement_type <> 'provider' then
+    raise exception 'This order does not use an online payment method.';
+  end if;
+
+  if uploaded_document_path is null or uploaded_document_path !~* '\.jpe?g$' then
+    raise exception 'Upload a JPEG (.jpg or .jpeg) payment receipt only.';
+  end if;
+
+  if uploaded_document_path is null
+      or length(uploaded_document_path) > 512
+      or split_part(uploaded_document_path, '/', 1) <> current_user_id::text
+      or split_part(uploaded_document_path, '/', 2) <> target_order_id::text
+      or not exists (
+        select 1 from storage.objects
+        where bucket_id = 'order-payment-proofs'
+          and name = uploaded_document_path
+          and owner_id = current_user_id::text
+          and metadata ->> 'mimetype' = 'image/jpeg'
+      ) then
+    raise exception 'Upload a private payment proof under your own order folder.';
+  end if;
+
+  select * into current_proof
+  from public.order_payment_proofs
+  where order_id = target_order_id
+  for update;
+  if found then
+    if current_proof.status <> 'rejected' then
+      raise exception 'Payment proof has already been submitted for this order.';
+    end if;
+    update public.order_payment_proofs
+    set document_path = uploaded_document_path,
+        reference_number = btrim(payment_reference_number),
+        status = 'pending',
+        review_note = null,
+        reviewed_by = null,
+        reviewed_at = null,
+        created_at = now()
+    where id = current_proof.id
+    returning id into proof_id;
+  else
+    insert into public.order_payment_proofs (
+      order_id, customer_id, branch_id, document_path, reference_number
+    )
+    values (
+      current_order.id, current_user_id, current_order.branch_id,
+      uploaded_document_path, btrim(payment_reference_number)
+    )
+    returning id into proof_id;
+  end if;
+
+  insert into public.audit_logs (
+    actor_id, action, record_type, record_id, branch_id, details
+  )
+  values (
+    current_user_id, 'order_payment_proof_submitted', 'order_payment_proof',
+    proof_id, current_order.branch_id,
+    jsonb_build_object(
+      'order_id', current_order.id,
+      'payment_method', current_payment.payment_method_code
+    )
+  );
+  return proof_id;
+end;
+$$;
+
+create table public.customer_notifications (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references public.profiles(id) on delete cascade,
+  order_id uuid not null references public.orders(id) on delete cascade,
+  event_type text not null check (event_type in ('order_rejected', 'payment_rejected', 'order_preparing', 'order_ready')),
+  title text not null,
+  message text not null,
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index customer_notifications_unread_idx
+  on public.customer_notifications(customer_id, created_at desc, id desc)
+  where read_at is null;
+alter table public.customer_notifications enable row level security;
+revoke all on public.customer_notifications from public, anon, authenticated;
+grant select on public.customer_notifications to authenticated;
+create policy "Customers can read their own notifications"
+on public.customer_notifications for select to authenticated
+using (customer_id = (select auth.uid()) and public.is_active_account());
+
+create function public.mark_customer_notification_read(target_notification_id uuid default null)
+returns void
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not public.is_active_account() then
+    raise exception 'Sign in with an active account.' using errcode = '42501';
+  end if;
+  update public.customer_notifications
+  set read_at = now()
+  where customer_id = (select auth.uid()) and read_at is null
+    and (target_notification_id is null or id = target_notification_id);
+end;
+$$;
+revoke all on function public.mark_customer_notification_read(uuid) from public, anon, authenticated;
+grant execute on function public.mark_customer_notification_read(uuid) to authenticated;
+
+create function public.notify_customer_order_update()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  order_record public.orders%rowtype;
+  event_name text;
+  notification_title text;
+  notification_message text;
+begin
+  if new.status is not distinct from old.status then return new; end if;
+  if tg_table_name = 'orders' then
+    order_record := new;
+    if new.status = 'cancelled' then
+      event_name := 'order_rejected';
+      notification_title := 'Order rejected';
+      notification_message := 'Your order ' || new.order_number || ' was rejected. Reason: ' ||
+        coalesce(nullif(btrim(new.cancellation_reason), ''), 'Please contact the store for details.');
+    elsif new.status = 'preparing' then
+      event_name := 'order_preparing';
+      notification_title := 'Orders preparing';
+      notification_message := 'Your order ' || new.order_number || ' is being prepared.';
+    elsif new.status = 'ready' then
+      event_name := 'order_ready';
+      notification_title := 'Orders Ready';
+      notification_message := 'Your order ' || new.order_number || ' is ready for delivery.';
+    else
+      return new;
+    end if;
+  else
+    if new.status <> 'rejected' then return new; end if;
+    select * into order_record from public.orders where id = new.order_id;
+    event_name := 'payment_rejected';
+    notification_title := 'Payment receipt rejected';
+    notification_message := 'The receipt for order ' || order_record.order_number ||
+      ' was rejected. Reason: ' || coalesce(nullif(btrim(new.review_note), ''), 'Please upload a new JPEG receipt.');
+  end if;
+  insert into public.customer_notifications(customer_id, order_id, event_type, title, message)
+  values(order_record.customer_id, order_record.id, event_name, notification_title, notification_message);
+  return new;
+end;
+$$;
+revoke all on function public.notify_customer_order_update() from public, anon, authenticated;
+create trigger orders_notify_customer
+  after update of status on public.orders
+  for each row execute function public.notify_customer_order_update();
+create trigger order_payment_proofs_notify_customer
+  after update of status on public.order_payment_proofs
+  for each row execute function public.notify_customer_order_update();
+
+notify pgrst, 'reload schema';
+commit;
+
+-- Dine-in, pick-up and delivery for online orders.
+begin;
+
+-- Restore the three online fulfillment choices, keeping the store/table rules.
+create or replace function public.enforce_store_order()
+returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.branch_id is distinct from public.get_store_branch_id() then
+      raise exception 'Orders must belong to the store.';
+    end if;
+    if new.fulfillment_method not in ('dine_in', 'pickup', 'delivery') then
+      raise exception 'Choose Dine-in, Pick-up, or Delivery.';
+    end if;
+    if new.dining_table_id is not null then
+      raise exception 'Table numbers are no longer used.';
+    end if;
+  else
+    if new.branch_id is distinct from old.branch_id
+      and new.branch_id is distinct from public.get_store_branch_id() then
+      raise exception 'Orders must belong to the store.';
+    end if;
+    if new.fulfillment_method is distinct from old.fulfillment_method
+      and new.fulfillment_method not in ('dine_in', 'pickup', 'delivery') then
+      raise exception 'Choose Dine-in, Pick-up, or Delivery.';
+    end if;
+    if new.dining_table_id is distinct from old.dining_table_id
+      and new.dining_table_id is not null then
+      raise exception 'Table numbers are no longer used.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+do $$
+declare
+  definition text;
+begin
+  select pg_get_functiondef('public.create_store_order(public.order_fulfillment_method,uuid,uuid,text,text,uuid,jsonb,uuid,public.benefit_type,jsonb,text,text)'::regprocedure)
+  into definition;
+  definition := replace(definition,
+    'if fulfillment is distinct from ''delivery''::public.order_fulfillment_method then',
+    'if fulfillment is null or fulfillment not in (''dine_in'', ''pickup'', ''delivery'') then');
+  definition := replace(definition, 'Only delivery orders are available.',
+    'Choose Dine-in, Pick-up, or Delivery.');
+  execute definition;
+
+  select pg_get_functiondef('public.notify_customer_order_update()'::regprocedure)
+  into definition;
+  definition := replace(definition, ''' is ready for delivery.'';',
+    ''' is ready'' || case new.fulfillment_method when ''delivery'' then '' for delivery'' when ''pickup'' then '' for pick-up'' else '' to serve'' end || ''.'';');
+  execute definition;
+end;
+$$;
+
+notify pgrst, 'reload schema';
+commit;
+
+-- Admin-configurable delivery fee included in order totals.
+begin;
+
+-- Start with free delivery, preserving the previous checkout behavior.
+-- Existing orders retain their saved delivery fees and totals.
+update public.branches set delivery_fee = 0
+where id = public.get_store_branch_id();
+
+-- Remove the old zero-delivery total check, whose generated name can vary.
+-- The current total = subtotal - discount_total + delivery_fee check remains.
+do $$
+declare
+  legacy_constraint text;
+begin
+  for legacy_constraint in
+    select conname from pg_constraint
+    where conrelid = 'public.orders'::regclass and contype = 'c'
+      and pg_get_constraintdef(oid) ~ '\mtotal\M'
+      and pg_get_constraintdef(oid) ~ '\msubtotal\M'
+      and pg_get_constraintdef(oid) ~ '\mdiscount_total\M'
+      and pg_get_constraintdef(oid) !~ '\mdelivery_fee\M'
+  loop
+    execute format('alter table public.orders drop constraint %I', legacy_constraint);
+  end loop;
+end;
+$$;
+
+drop function public.create_store_order(
+  public.order_fulfillment_method, uuid, uuid, text, text, uuid, jsonb,
+  uuid, public.benefit_type, jsonb, text, text
+);
+
+create or replace function public.create_store_order(
+  fulfillment public.order_fulfillment_method,
+  payment_method_id uuid,
+  client_request_id uuid,
+  customer_phone text,
+  customer_note text,
+  requested_promotion_id uuid,
+  cart_items jsonb,
+  target_benefit_request_id uuid default null,
+  requested_benefit_type public.benefit_type default null,
+  requested_benefit_items jsonb default null,
+  uploaded_benefit_document_path text default null,
+  customer_delivery_address text default null,
+  expected_delivery_fee numeric default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := (select auth.uid());
+  target_branch_id uuid := public.get_store_branch_id();
+  current_order public.orders%rowtype;
+  created_order_id uuid;
+  is_replay boolean := false;
+  configured_delivery_fee numeric(10, 2);
+begin
+  if current_user_id is null or not public.is_active_account() then
+    raise exception 'Sign in with an active account to place an order.'
+      using errcode = '42501';
+  end if;
+
+  if fulfillment is null or fulfillment not in ('dine_in', 'pickup', 'delivery') then
+    raise exception 'Choose Dine-in, Pick-up, or Delivery.';
+  end if;
+  if target_benefit_request_id is not null and fulfillment <> 'dine_in' then
+    raise exception 'Benefit discounts are available for Dine-in orders.';
+  end if;
+
+  if client_request_id is null then
+    raise exception 'Sign in and submit a valid order request.';
+  end if;
+  -- Serialize retries before checking for the saved order and current fee.
+  perform pg_advisory_xact_lock(
+    hashtextextended(current_user_id::text || ':' || client_request_id::text, 0)
+  );
+
+  select * into current_order
+  from public.orders
+  where customer_id = current_user_id
+    and orders.client_request_id = create_store_order.client_request_id
+  for update;
+  is_replay := found;
+
+  if is_replay and (
+    current_order.branch_id is distinct from target_branch_id
+    or current_order.fulfillment_method is distinct from fulfillment
+    or current_order.delivery_address is distinct from nullif(btrim(customer_delivery_address), '')
+  ) then
+    raise exception 'This order submission key was already used for different fulfillment details.';
+  end if;
+
+  if not is_replay and fulfillment = 'delivery' then
+    select branch.delivery_fee into configured_delivery_fee
+    from public.branches as branch
+    where branch.id = target_branch_id and branch.is_active
+    for share;
+    if not found then
+      raise exception 'This branch is not accepting orders.';
+    end if;
+    if expected_delivery_fee is null or expected_delivery_fee is distinct from configured_delivery_fee then
+      raise exception 'Delivery fee changed. Review the updated total. If you already paid, contact the store before submitting.';
+    end if;
+  end if;
+
+  created_order_id := public.create_customer_order_with_benefit(
+    target_branch_id,
+    fulfillment,
+    payment_method_id,
+    client_request_id,
+    customer_phone,
+    customer_note,
+    requested_promotion_id,
+    cart_items,
+    target_benefit_request_id,
+    requested_benefit_type,
+    requested_benefit_items,
+    uploaded_benefit_document_path,
+    customer_delivery_address
+  );
+
+  return created_order_id;
+end;
+$$;
+
+revoke all on function public.create_store_order(
+  public.order_fulfillment_method, uuid, uuid, text, text, uuid, jsonb,
+  uuid, public.benefit_type, jsonb, text, text, numeric
+) from public, anon, authenticated;
+grant execute on function public.create_store_order(
+  public.order_fulfillment_method, uuid, uuid, text, text, uuid, jsonb,
+  uuid, public.benefit_type, jsonb, text, text, numeric
+) to authenticated;
+
+notify pgrst, 'reload schema';
+commit;
+
+-- Staff point of sale.
+begin;
+
+alter table public.orders
+  alter column customer_id drop not null,
+  add column order_source text not null default 'online' check (order_source in ('online', 'pos')),
+  add column cashier_id uuid references public.profiles(id) on delete restrict,
+  add column pos_request_fingerprint text,
+  add constraint orders_source_identity_check check (
+    (order_source = 'online' and customer_id is not null and cashier_id is null)
+    or (order_source = 'pos' and customer_id is null and cashier_id is not null)
+  );
+create unique index orders_pos_request_key on public.orders(cashier_id, client_request_id)
+where order_source = 'pos';
+
+-- Walk-in orders have no customer account to notify. Online notifications stay intact.
+do $$
+declare definition text;
+begin
+  select pg_get_functiondef('public.notify_customer_order_update()'::regprocedure) into definition;
+  definition := replace(definition,
+    '  insert into public.customer_notifications(',
+    '  if order_record.customer_id is null then return new; end if;
+  insert into public.customer_notifications(');
+  execute definition;
+end;
+$$;
+
+create function public.create_pos_order(
+  guest_name text,
+  guest_phone text,
+  fulfillment public.order_fulfillment_method,
+  method_id uuid,
+  request_id uuid,
+  cart_items jsonb,
+  receipt_path text,
+  expected_delivery_fee numeric,
+  delivery_address text default null,
+  mark_paid boolean default false
+)
+returns uuid
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  cashier uuid := (select auth.uid());
+  store_id uuid := public.get_store_branch_id();
+  created_id uuid;
+  previous_order public.orders%rowtype;
+  fingerprint text;
+begin
+  if cashier is null or not public.is_active_account()
+    or not (public.has_role('admin') or (
+      public.has_role('staff')
+      and public.has_permission(store_id, 'orders', 'view')
+      and public.has_permission(store_id, 'orders', 'create')
+    )) then
+    raise exception 'Staff need Orders view and create permission to use POS.' using errcode = '42501';
+  end if;
+  if mark_paid and not public.has_permission(store_id, 'orders', 'edit') then
+    raise exception 'Orders edit permission is required to verify a payment.' using errcode = '42501';
+  end if;
+  if guest_name is null or length(btrim(guest_name)) not between 1 and 120 then
+    raise exception 'Enter a customer name between 1 and 120 characters.';
+  end if;
+  if request_id is null then raise exception 'Submit a valid POS request.'; end if;
+  if fulfillment is null or fulfillment not in ('dine_in', 'pickup', 'delivery') then
+    raise exception 'Choose Dine-in, Pick-up, or Delivery.';
+  end if;
+
+  fingerprint := md5(jsonb_build_object(
+    'name', btrim(guest_name), 'phone', btrim(guest_phone), 'fulfillment', fulfillment,
+    'method', method_id, 'items', cart_items, 'receipt', receipt_path,
+    'fee', expected_delivery_fee, 'address', nullif(btrim(delivery_address), ''), 'paid', mark_paid
+  )::text);
+  perform pg_advisory_xact_lock(hashtextextended(cashier::text || ':' || request_id::text, 0));
+  select * into previous_order from public.orders
+  where cashier_id = cashier and client_request_id = request_id and order_source = 'pos'
+  for update;
+  if found then
+    if previous_order.pos_request_fingerprint is distinct from fingerprint then
+      raise exception 'This POS request was already used for different sale details.';
+    end if;
+    return previous_order.id;
+  end if;
+  if exists (select 1 from public.orders where customer_id = cashier and client_request_id = request_id) then
+    raise exception 'This request was already used for an online order.';
+  end if;
+
+  if receipt_path is null or receipt_path !~* '\.jpe?g$'
+    or split_part(receipt_path, '/', 1) <> cashier::text
+    or split_part(receipt_path, '/', 2) <> request_id::text
+    or not exists (
+      select 1 from storage.objects
+      where bucket_id = 'order-payment-proofs' and name = receipt_path
+        and owner_id = cashier::text and metadata ->> 'mimetype' = 'image/jpeg'
+    ) then
+    raise exception 'Upload a JPEG receipt under your own POS sale folder.';
+  end if;
+
+  -- Reuse the same server pricing, stock reservation, fee and e-payment checks.
+  created_id := public.create_store_order(
+    fulfillment, method_id, request_id, guest_phone, '', null, cart_items,
+    null, null, null, null, delivery_address, expected_delivery_fee
+  );
+  update public.orders
+  set customer_id = null, customer_name = btrim(guest_name), customer_email = null,
+      order_source = 'pos', cashier_id = cashier, pos_request_fingerprint = fingerprint
+  where id = created_id;
+  insert into public.order_payment_proofs(
+    order_id, customer_id, branch_id, document_path, status
+  ) values(created_id, cashier, store_id, receipt_path, 'pending');
+  if mark_paid then
+    perform public.review_order_payment_proof(created_id, 'approved', 'Payment verified at POS.');
+  end if;
+  insert into public.audit_logs(actor_id, branch_id, action, record_type, record_id, details)
+  values(cashier, store_id, 'pos_order_created', 'order', created_id,
+    jsonb_build_object('customer_name', btrim(guest_name), 'payment_verified', mark_paid));
+  return created_id;
+end;
+$$;
+revoke all on function public.create_pos_order(
+  text, text, public.order_fulfillment_method, uuid, uuid, jsonb, text, numeric, text, boolean
+) from public, anon, authenticated;
+grant execute on function public.create_pos_order(
+  text, text, public.order_fulfillment_method, uuid, uuid, jsonb, text, numeric, text, boolean
+) to authenticated;
+
+notify pgrst, 'reload schema';
+commit;
+
+-- Integrated counter checkout, cash and verified in-person discounts.
+begin;
+
+alter table public.payment_methods drop constraint payment_methods_active_epayment_only;
+alter table public.payment_methods add constraint payment_methods_active_checkout_check check (
+  not is_active or (settlement_type = 'provider' and nullif(btrim(qr_code_path), '') is not null)
+  or (settlement_type = 'pay_at_branch' and code = 'pos_cash')
+);
+insert into public.payment_methods(branch_id, code, name, settlement_type, provider, is_active)
+values(public.get_store_branch_id(), 'pos_cash', 'Cash', 'pay_at_branch', null, true)
+on conflict (branch_id, code) where branch_id is not null
+do update set name = 'Cash', settlement_type = 'pay_at_branch', provider = null, is_active = true;
+
+-- A private transaction authorization lets the shared price engine accept cash
+-- only while the POS RPC is running. Browser sessions cannot forge this row.
+create table public.pos_checkout_authorizations (
+  transaction_id bigint not null,
+  cashier_id uuid not null,
+  request_id uuid not null,
+  primary key(transaction_id, cashier_id, request_id)
+);
+alter table public.pos_checkout_authorizations enable row level security;
+revoke all on public.pos_checkout_authorizations from public, anon, authenticated;
+
+create or replace function public.enforce_fulfillment_payment_method()
+returns trigger language plpgsql security definer set search_path = ''
+as $$
+declare order_record public.orders%rowtype; method public.payment_methods%rowtype;
+begin
+  select * into order_record from public.orders where id = new.order_id;
+  if not found then raise exception 'Payment must belong to an existing order.'; end if;
+  select * into method from public.payment_methods where id = new.payment_method_id;
+  if found and method.branch_id = order_record.branch_id and method.is_active then
+    if method.settlement_type = 'provider' and nullif(btrim(method.qr_code_path), '') is not null then return new; end if;
+    if method.settlement_type = 'pay_at_branch' and method.code = 'pos_cash' and (
+      (order_record.order_source = 'pos' and public.has_permission(order_record.branch_id, 'orders', 'edit'))
+      or exists(select 1 from public.pos_checkout_authorizations as pos_auth
+        where pos_auth.transaction_id = pg_catalog.txid_current()
+          and pos_auth.cashier_id = (select auth.uid())
+          and pos_auth.cashier_id = order_record.customer_id
+          and pos_auth.request_id = order_record.client_request_id)
+    ) then return new; end if;
+  end if;
+  raise exception 'Online orders require an active e-payment method. Cash is available only at POS.';
+end;
+$$;
+
+alter table public.orders
+  add column cash_received numeric(12,2) check (cash_received >= 0),
+  add column cash_change numeric(12,2) check (cash_change >= 0),
+  add column pos_discount_type text check(pos_discount_type in ('promotion', 'pwd', 'senior_citizen')),
+  add column pos_discount_percent numeric(5,2);
+
+create table public.pos_benefit_verifications (
+  order_id uuid primary key references public.orders(id) on delete restrict,
+  branch_id uuid not null references public.branches(id),
+  beneficiary_name text not null,
+  beneficiary_id text not null,
+  benefit_type public.benefit_type not null,
+  vat_registration text not null,
+  vat_rate numeric not null,
+  discount_percent numeric not null,
+  verified_by uuid not null references public.profiles(id),
+  verified_at timestamptz not null default now()
+);
+alter table public.pos_benefit_verifications enable row level security;
+revoke all on public.pos_benefit_verifications from public, anon, authenticated;
+grant select on public.pos_benefit_verifications to authenticated;
+create policy "Authorized staff can read counter ID verification"
+on public.pos_benefit_verifications for select to authenticated
+using(public.is_active_account() and public.can_access_branch(branch_id) and public.has_permission(branch_id, 'promotions', 'approve'));
+
+create function public.complete_pos_sale(
+  guest_name text, guest_phone text, fulfillment public.order_fulfillment_method,
+  method_id uuid, request_id uuid, cart_items jsonb, quoted_total numeric,
+  expected_delivery_fee numeric, cash_tendered numeric default null,
+  qr_verified boolean default false, delivery_address text default null,
+  promotion_id uuid default null, benefit public.benefit_type default null,
+  beneficiary_name text default null, beneficiary_id text default null,
+  id_verified boolean default false
+)
+returns uuid language plpgsql security definer set search_path = ''
+as $$
+declare
+  cashier uuid := (select auth.uid());
+  store_id uuid := public.get_store_branch_id();
+  method public.payment_methods%rowtype;
+  policy public.benefit_discount_policy%rowtype;
+  previous_order public.orders%rowtype;
+  created_id uuid;
+  fingerprint text;
+  contact_phone text;
+  entry jsonb;
+  eligible integer;
+  line_record public.order_items%rowtype;
+  category_type text;
+  food_count integer := 0;
+  drink_count integer := 0;
+  gross numeric;
+  net numeric;
+  reduction numeric;
+  discount_amount numeric := 0;
+  final_total numeric;
+begin
+  if cashier is null or not public.is_active_account() or not (
+    public.has_role('admin') or (public.has_role('staff')
+      and public.has_permission(store_id,'orders','view')
+      and public.has_permission(store_id,'orders','create')
+      and public.has_permission(store_id,'orders','edit'))
+  ) then raise exception 'Orders view, create and edit permissions are required to take POS payments.' using errcode = '42501'; end if;
+  if request_id is null then raise exception 'Submit a valid POS request.'; end if;
+  if length(coalesce(btrim(guest_name), '')) > 120 then raise exception 'Customer name cannot exceed 120 characters.'; end if;
+  if nullif(btrim(guest_phone), '') is not null and btrim(guest_phone) !~ '^[+()0-9 .-]{7,40}$' then raise exception 'Enter a valid contact phone.'; end if;
+  if fulfillment = 'delivery' and nullif(btrim(guest_phone), '') is null then raise exception 'Delivery requires a contact phone.'; end if;
+  if benefit is not null and complete_pos_sale.promotion_id is not null then raise exception 'Choose a promotion or a PWD/Senior benefit, not both.'; end if;
+  fingerprint := md5(jsonb_build_object('name',btrim(guest_name),'phone',btrim(guest_phone),
+    'fulfillment',fulfillment,'method',method_id,'items',cart_items,'total',quoted_total,
+    'fee',expected_delivery_fee,'cash',cash_tendered,'qr',qr_verified,
+    'address',nullif(btrim(delivery_address),''),'promotion',complete_pos_sale.promotion_id,'benefit',benefit,
+    'beneficiary',btrim(beneficiary_name),'id',btrim(beneficiary_id),'verified',id_verified)::text);
+  perform pg_advisory_xact_lock(hashtextextended(cashier::text || ':' || request_id::text,0));
+  select * into previous_order from public.orders where cashier_id=cashier and client_request_id=request_id and order_source='pos' for update;
+  if found then
+    if previous_order.pos_request_fingerprint is distinct from fingerprint then raise exception 'This POS request was already used for different sale details.'; end if;
+    return previous_order.id;
+  end if;
+  if exists(select 1 from public.orders where customer_id=cashier and client_request_id=request_id) then raise exception 'This request was already used for another order.'; end if;
+  select * into method from public.payment_methods where id=method_id and branch_id=store_id and is_active for share;
+  if not found or not (method.settlement_type='provider' or method.code='pos_cash') then raise exception 'Choose an active POS payment method.'; end if;
+  if method.settlement_type='provider' and not coalesce(qr_verified,false) then raise exception 'Verify the QR payment against the store account before completing the sale.'; end if;
+  if complete_pos_sale.promotion_id is not null and exists(select 1 from public.promotions where id=complete_pos_sale.promotion_id and max_uses_per_customer is not null) then
+    raise exception 'This promotion requires a customer account. Choose another promotion.';
+  end if;
+  if cart_items is null or jsonb_typeof(cart_items)<>'array' or jsonb_array_length(cart_items) not between 1 and 50 then raise exception 'Add between 1 and 50 configured items.'; end if;
+  if exists(select 1 from jsonb_array_elements(cart_items) as item
+    group by item->>'product_id', item->>'variant_id',
+      (select array_agg(value order by value) from jsonb_array_elements_text(item->'addon_ids'))
+    having count(*)>1) then raise exception 'Combine identical configured items before payment.'; end if;
+
+  if benefit is not null then
+    if not public.has_permission(store_id,'promotions','approve') then raise exception 'Promotions approve permission is required for a PWD/Senior discount.' using errcode='42501'; end if;
+    if not coalesce(id_verified,false) or length(coalesce(btrim(beneficiary_name),'')) not between 1 and 120
+      or length(coalesce(btrim(beneficiary_id),'')) not between 3 and 80 then raise exception 'Check the customer ID in person and record the beneficiary name and ID number.'; end if;
+    select * into policy from public.benefit_discount_policy where id and is_active for share;
+    if not found or policy.vat_registration='not_configured' then raise exception 'Configure and activate the benefit policy before applying this discount.'; end if;
+    if (benefit='pwd' and not policy.pwd_enabled) or (benefit='senior_citizen' and not policy.senior_citizen_enabled) then raise exception 'This benefit type is disabled.'; end if;
+  end if;
+  select coalesce(nullif(btrim(guest_phone),''),nullif(phone,''),'0000000') into contact_phone from public.profiles where id=cashier;
+  insert into public.pos_checkout_authorizations values(pg_catalog.txid_current(),cashier,request_id);
+  created_id := public.create_store_order(fulfillment,method_id,request_id,contact_phone,'',complete_pos_sale.promotion_id,cart_items,
+    null,null,null,null,delivery_address,expected_delivery_fee);
+  update public.orders set customer_id=null,customer_name=coalesce(nullif(btrim(guest_name),''),'Walk-in customer'),
+    customer_phone=coalesce(btrim(guest_phone),''),customer_email=null,order_source='pos',cashier_id=cashier,
+    pos_request_fingerprint=fingerprint,pos_discount_type=case when benefit is not null then benefit::text when complete_pos_sale.promotion_id is not null then 'promotion' end,
+    pos_discount_percent=case when benefit is not null then policy.discount_percent end
+  where id=created_id;
+
+  if benefit is not null then
+    for entry in select value from jsonb_array_elements(cart_items) loop
+      if coalesce(entry->>'eligible_quantity','0') !~ '^[0-9]{1,2}$' then raise exception 'Eligible quantities must be whole numbers.'; end if;
+      eligible := coalesce(entry->>'eligible_quantity','0')::integer;
+      if eligible=0 then continue; end if;
+      select item.* into strict line_record from public.order_items as item
+      where item.order_id=created_id and item.product_id=(entry->>'product_id')::uuid
+        and item.variant_id is not distinct from nullif(entry->>'variant_id','')::uuid
+        and coalesce((select array_agg(addon_id order by addon_id) from public.order_item_addons where order_item_id=item.id),array[]::uuid[])
+          =array(select value::uuid from jsonb_array_elements_text(entry->'addon_ids') order by value::uuid)
+      for update;
+      if eligible>line_record.quantity then raise exception 'Eligible quantity exceeds the order quantity.'; end if;
+      select category.type into category_type from public.products as product join public.categories as category on category.id=product.category_id where product.id=line_record.product_id;
+      if category_type='drink' then drink_count:=drink_count+eligible;
+      elsif category_type='food' then food_count:=food_count+eligible;
+      else raise exception 'Only drink and food items are eligible for this benefit.'; end if;
+      if drink_count>1 or food_count>1 then raise exception 'Select at most one drink and one food for the beneficiary.'; end if;
+      gross:=round(line_record.line_subtotal*eligible/line_record.quantity,2);
+      if policy.vat_registration='vat_registered' then
+        net:=round(gross/(1+policy.vat_rate/100),2);
+        reduction:=gross-round(net*(1-policy.discount_percent/100),2);
+      else reduction:=round(gross*policy.discount_percent/100,2); end if;
+      update public.order_items set discount_amount=reduction,line_total=line_subtotal-reduction where id=line_record.id;
+      discount_amount:=discount_amount+reduction;
+    end loop;
+    if discount_amount<=0 then raise exception 'Select an eligible drink or food quantity for the beneficiary.'; end if;
+    update public.orders set discount_total=discount_amount,total=subtotal-discount_amount+delivery_fee where id=created_id;
+    update public.payments set amount=amount-discount_amount where order_id=created_id;
+    insert into public.pos_benefit_verifications(order_id,branch_id,beneficiary_name,beneficiary_id,benefit_type,vat_registration,vat_rate,discount_percent,verified_by)
+    values(created_id,store_id,btrim(beneficiary_name),btrim(beneficiary_id),benefit,policy.vat_registration,policy.vat_rate,policy.discount_percent,cashier);
+  end if;
+  select total,discount_total into final_total,discount_amount from public.orders where id=created_id;
+  if quoted_total is null or quoted_total is distinct from final_total then raise exception 'The total changed. Refresh prices and discounts, then review the amount before payment.'; end if;
+  if method.code='pos_cash' then
+    if cash_tendered is null or cash_tendered<final_total or cash_tendered<>round(cash_tendered,2) or cash_tendered>9999999999.99 then raise exception 'Enter cash received covering the total, with at most two decimal places.'; end if;
+    update public.orders set cash_received=cash_tendered,cash_change=cash_tendered-final_total where id=created_id;
+    perform public.record_order_payment(created_id);
+  else
+    perform public.record_manual_provider_payment_override(created_id,'QR payment checked in person at POS by cashier.');
+  end if;
+  perform public.update_order_status(created_id,'confirmed',null);
+  delete from public.pos_checkout_authorizations as pos_auth where pos_auth.transaction_id=pg_catalog.txid_current() and pos_auth.cashier_id=cashier and pos_auth.request_id=complete_pos_sale.request_id;
+  insert into public.audit_logs(actor_id,branch_id,action,record_type,record_id,details)
+  values(cashier,store_id,'pos_sale_completed','order',created_id,jsonb_build_object('method',method.name,'total',final_total,'discount',discount_amount,'benefit',benefit,'promotion',complete_pos_sale.promotion_id));
+  return created_id;
+end;
+$$;
+revoke all on function public.complete_pos_sale(text,text,public.order_fulfillment_method,uuid,uuid,jsonb,numeric,numeric,numeric,boolean,text,uuid,public.benefit_type,text,text,boolean) from public,anon,authenticated;
+grant execute on function public.complete_pos_sale(text,text,public.order_fulfillment_method,uuid,uuid,jsonb,numeric,numeric,numeric,boolean,text,uuid,public.benefit_type,text,text,boolean) to authenticated;
+revoke all on function public.create_pos_order(text,text,public.order_fulfillment_method,uuid,uuid,jsonb,text,numeric,text,boolean) from authenticated;
+
+notify pgrst,'reload schema';
+commit;

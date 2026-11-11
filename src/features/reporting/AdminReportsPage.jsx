@@ -1,3 +1,4 @@
+import { formatOrderStatus } from '../orders/orderStatus.js'
 import { useEffect, useState } from 'react'
 import {
   Alert,
@@ -91,11 +92,11 @@ function paymentStatus(transaction) {
 
 export default function AdminReportsPage() {
   const { account, hasPermission } = useAuth()
-  const isSuperAdmin = account.roles.includes('super_admin')
-  const canViewReports = isSuperAdmin || hasPermission('reports', 'view')
-  const canViewFinancials = isSuperAdmin || hasPermission('financials', 'view')
-  const canRecordRefund = isSuperAdmin || hasPermission('financials', 'edit')
-  const canExport = isSuperAdmin || hasPermission('reports', 'export')
+  const isAdmin = account.roles.includes('admin')
+  const canViewReports = isAdmin || hasPermission('reports', 'view')
+  const canViewFinancials = isAdmin || hasPermission('financials', 'view')
+  const canRecordRefund = isAdmin || hasPermission('financials', 'edit')
+  const canExport = isAdmin || hasPermission('reports', 'export')
   const [branches, setBranches] = useState([])
   const [paymentMethods, setPaymentMethods] = useState([])
   const [branchesLoaded, setBranchesLoaded] = useState(false)
@@ -134,7 +135,7 @@ export default function AdminReportsPage() {
         if (!active) return
         setBranches(loadedBranches)
         setPaymentMethods(loadedMethods)
-        if (!isSuperAdmin) setBranchId(loadedBranches[0]?.id || '')
+        setBranchId(loadedBranches[0]?.id || '')
         setBranchesLoaded(true)
       })
       .catch((error) => {
@@ -145,7 +146,7 @@ export default function AdminReportsPage() {
         }
       })
     return () => { active = false }
-  }, [account, isSuperAdmin])
+  }, [account, isAdmin])
 
   useEffect(() => {
     if (
@@ -153,7 +154,7 @@ export default function AdminReportsPage() {
       !canViewReports ||
       reportView !== 'transactions' ||
       !canViewFinancials ||
-      (!isSuperAdmin && !branchId)
+      (!isAdmin && !branchId)
     ) {
       return undefined
     }
@@ -177,7 +178,7 @@ export default function AdminReportsPage() {
     canViewFinancials,
     canViewReports,
     endDate,
-    isSuperAdmin,
+    isAdmin,
     paymentMethodCode,
     reloadKey,
     reportView,
@@ -189,7 +190,7 @@ export default function AdminReportsPage() {
       !branchesLoaded ||
       !canViewReports ||
       reportView !== 'products' ||
-      (!isSuperAdmin && !branchId)
+      (!isAdmin && !branchId)
     ) {
       return undefined
     }
@@ -211,7 +212,7 @@ export default function AdminReportsPage() {
     branchesLoaded,
     canViewReports,
     endDate,
-    isSuperAdmin,
+    isAdmin,
     reloadKey,
     reportView,
     salesGrouping,
@@ -322,7 +323,6 @@ export default function AdminReportsPage() {
         downloadCsv(
           `agape-payments-${startDate}-to-${endDate}.csv`,
           [
-            'Branch',
             'Order number',
             'Order date',
             'Payment updated at',
@@ -335,7 +335,6 @@ export default function AdminReportsPage() {
             'Net amount',
           ],
           allTransactions.map((transaction) => [
-            transaction.branch_name,
             transaction.order_number,
             transaction.order_created_at,
             transaction.updated_at,
@@ -378,8 +377,8 @@ export default function AdminReportsPage() {
         {!canViewReports && (
           <Alert severity="info">Reports view permission is required to view reports.</Alert>
         )}
-        {!isSuperAdmin && !branches.length && branchesLoaded && (
-          <Alert severity="info">No assigned branches are available for reporting.</Alert>
+        {!isAdmin && !branches.length && branchesLoaded && (
+          <Alert severity="info">Store details are unavailable for reporting.</Alert>
         )}
         {canViewReports && (
           <>
@@ -404,27 +403,7 @@ export default function AdminReportsPage() {
                 useFlexGap
                 sx={{ alignItems: { md: 'center' }, flexWrap: { md: 'wrap' } }}
               >
-                <FormControl sx={{ width: { xs: '100%', sm: 240 }, flexShrink: 0 }}>
-                  <InputLabel id="reports-branch-label">Branch</InputLabel>
-                  <Select
-                    labelId="reports-branch-label"
-                    label="Branch"
-                    value={branchId}
-                    onChange={(event) => {
-                      setIsLoading(true)
-                      setErrorMessage('')
-                      setPage(0)
-                      setSalesCategory('')
-                      setSalesProduct('')
-                      setBranchId(event.target.value)
-                    }}
-                  >
-                    {isSuperAdmin && <MenuItem value="">All branches</MenuItem>}
-                    {branches.map((branch) => (
-                      <MenuItem key={branch.id} value={branch.id}>{branch.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+
                 {reportView === 'transactions' ? (
                   <>
                     <FormControl sx={{ width: { xs: '100%', sm: 210 }, flexShrink: 0 }}>
@@ -646,7 +625,6 @@ export default function AdminReportsPage() {
                       >
                         <TableHead>
                           <TableRow>
-                            <TableCell>Branch</TableCell>
                             <TableCell>Order</TableCell>
                             <TableCell>Order date</TableCell>
                             <TableCell>Payment updated</TableCell>
@@ -662,7 +640,6 @@ export default function AdminReportsPage() {
                         <TableBody>
                           {visibleTransactions.map((transaction) => (
                             <TableRow key={transaction.payment_id} hover>
-                              <TableCell>{transaction.branch_name}</TableCell>
                               <TableCell>
                                 <Typography variant="body2" fontWeight={700}>
                                   {transaction.order_number}
@@ -743,7 +720,7 @@ export default function AdminReportsPage() {
         {selectedTransaction && (
           <>
             <DialogTitle id="payment-transaction-detail-title">
-              {selectedTransaction.order_number} · {selectedTransaction.branch_name}
+              {selectedTransaction.order_number}
             </DialogTitle>
             <DialogContent dividers>
               <Stack spacing={2.5}>
@@ -766,7 +743,7 @@ export default function AdminReportsPage() {
                         </Typography>
                       </Box>
                       <Stack direction="row" spacing={1}>
-                        <Chip size="small" label={label(selectedTransaction.order_status)} />
+                        <Chip size="small" label={formatOrderStatus(selectedTransaction.order_status)} />
                         <Chip
                           size="small"
                           variant="outlined"

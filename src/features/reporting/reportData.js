@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../../lib/supabaseClient.js'
+import { getStoreBranchId } from '../public/publicData.js'
 
 function unwrap({ data, error }, action) {
   if (error) throw new Error(`${action}: ${error.message}`)
@@ -8,7 +9,7 @@ function unwrap({ data, error }, action) {
 export async function getOperationalReport(branchId, startDate, endDate, page = 0, pageSize = 50) {
   return unwrap(
     await getSupabaseClient().rpc('get_operational_report_with_payments', {
-      target_branch_id: branchId || null,
+      target_branch_id: branchId || await getStoreBranchId(),
       start_date: startDate,
       end_date: endDate,
       page_offset: page * pageSize,
@@ -52,6 +53,7 @@ export async function getReportPaymentMethods() {
     await getSupabaseClient()
       .from('payment_methods')
       .select('code, name')
+      .eq('branch_id', await getStoreBranchId())
       .eq('is_active', true)
       .order('name'),
     'Could not load payment methods',
@@ -69,7 +71,7 @@ export async function getPaymentTransactions(
 ) {
   return unwrap(
     await getSupabaseClient().rpc('get_report_payment_transactions', {
-      target_branch_id: branchId || null,
+      target_branch_id: branchId || await getStoreBranchId(),
       target_payment_method_code: paymentMethodCode || null,
       start_date: startDate,
       end_date: endDate,
@@ -121,7 +123,7 @@ export async function getProductSalesReport(
 ) {
   return unwrap(
     await getSupabaseClient().rpc('get_product_sales_report', {
-      target_branch_id: branchId || null,
+      target_branch_id: branchId || await getStoreBranchId(),
       start_date: startDate,
       end_date: endDate,
       target_grouping: grouping,
@@ -186,7 +188,7 @@ export async function recordPaymentRefund(paymentId, amount, note) {
 export async function getFinancialReport(branchId, startDate, endDate) {
   const rows = unwrap(
     await getSupabaseClient().rpc('get_financial_report_with_payments', {
-      target_branch_id: branchId || null,
+      target_branch_id: branchId || await getStoreBranchId(),
       start_date: startDate,
       end_date: endDate,
     }),
@@ -196,6 +198,7 @@ export async function getFinancialReport(branchId, startDate, endDate) {
 }
 
 export async function getBranchExpenses(branchId, startDate, endDate, page = 0, pageSize = 50) {
+  branchId = branchId || await getStoreBranchId()
   let query = getSupabaseClient()
     .from('branch_expenses')
     .select('id, branch_id, occurred_on, category, description, amount, note, created_at, voided_at, void_reason', { count: 'exact' })

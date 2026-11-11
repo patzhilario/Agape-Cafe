@@ -193,12 +193,12 @@ function SalesTrendChart({ data }) {
 
 export default function AdminFinancialsPage() {
   const { account, hasPermission } = useAuth()
-  const isSuperAdmin = account.roles.includes('super_admin')
-  const canExport = isSuperAdmin || hasPermission('financials', 'export')
-  const canCreate = isSuperAdmin ||
+  const isAdmin = account.roles.includes('admin')
+  const canExport = isAdmin || hasPermission('financials', 'export')
+  const canCreate = isAdmin ||
     hasPermission('financials', 'create') ||
     hasPermission('financials', 'edit')
-  const canVoid = isSuperAdmin || hasPermission('financials', 'edit')
+  const canVoid = isAdmin || hasPermission('financials', 'edit')
   const [branches, setBranches] = useState([])
   const [branchesLoaded, setBranchesLoaded] = useState(false)
   const [branchId, setBranchId] = useState('')
@@ -233,9 +233,9 @@ export default function AdminFinancialsPage() {
       .then((data) => {
         if (!active) return
         setBranches(data)
-        if (!isSuperAdmin) setBranchId(data[0]?.id || '')
+        setBranchId(data[0]?.id || '')
         setBranchesLoaded(true)
-        if (!isSuperAdmin && !data.length) setIsLoading(false)
+        if (!isAdmin && !data.length) setIsLoading(false)
       })
       .catch((error) => {
         console.error('Unable to load branches for financial monitoring.', error)
@@ -245,10 +245,10 @@ export default function AdminFinancialsPage() {
         }
       })
     return () => { active = false }
-  }, [account, isSuperAdmin])
+  }, [account, isAdmin])
 
   useEffect(() => {
-    if (!branchesLoaded || (!isSuperAdmin && !branchId)) return undefined
+    if (!branchesLoaded || (!isAdmin && !branchId)) return undefined
     let active = true
     Promise.all([
       getFinancialReport(branchId, startDate, endDate),
@@ -266,10 +266,10 @@ export default function AdminFinancialsPage() {
       })
       .finally(() => { if (active) setIsLoading(false) })
     return () => { active = false }
-  }, [branchId, branchesLoaded, endDate, expensePage, expensePageSize, isSuperAdmin, reloadKey, startDate])
+  }, [branchId, branchesLoaded, endDate, expensePage, expensePageSize, isAdmin, reloadKey, startDate])
 
   useEffect(() => {
-    if (!branchesLoaded || (!isSuperAdmin && !branchId)) return undefined
+    if (!branchesLoaded || (!isAdmin && !branchId)) return undefined
     let active = true
     getAllOperationalReport(branchId, startDate, endDate)
       .then((orders) => {
@@ -283,12 +283,12 @@ export default function AdminFinancialsPage() {
         if (active) setSalesTrendError({ key: salesTrendKey, message: error.message })
       })
     return () => { active = false }
-  }, [branchId, branchesLoaded, endDate, isSuperAdmin, reloadKey, salesTrendKey, startDate])
+  }, [branchId, branchesLoaded, endDate, isAdmin, reloadKey, salesTrendKey, startDate])
 
   async function createExpense(event) {
     event.preventDefault()
     if (!branchId) {
-      setErrorMessage('Select a branch before recording an expense.')
+      setErrorMessage('Store unavailable before recording an expense.')
       return
     }
     setIsSaving(true)
@@ -343,7 +343,7 @@ export default function AdminFinancialsPage() {
     downloadCsv(
       `agape-financial-summary-${startDate}-to-${endDate}.csv`,
       [
-        'From', 'To', 'Branch', 'Completed orders', 'Gross sales', 'Discounts',
+        'From', 'To', 'Completed orders', 'Gross sales', 'Discounts',
         'Net sales', 'Collected sales', 'Paid orders', 'Estimated COGS',
         'Uncosted orders', 'Manual usage cost', 'Uncosted manual usage',
         'Inventory purchases', 'Uncosted inventory purchases', 'Expenses',
@@ -352,7 +352,6 @@ export default function AdminFinancialsPage() {
       [[
         startDate,
         endDate,
-        branchId ? branches.find((branch) => branch.id === branchId)?.name : 'All branches',
         summary.completed_orders,
         summary.gross_sales,
         summary.discounts,
@@ -378,10 +377,9 @@ export default function AdminFinancialsPage() {
       const allExpenses = await getAllBranchExpenses(branchId, startDate, endDate)
       downloadCsv(
         `agape-expenses-${startDate}-to-${endDate}.csv`,
-        ['Date', 'Branch', 'Category', 'Description', 'Amount', 'Note', 'Status', 'Void reason'],
+        ['Date', 'Category', 'Description', 'Amount', 'Note', 'Status', 'Void reason'],
         allExpenses.map((expense) => [
           expense.occurred_on,
-          branches.find((branch) => branch.id === expense.branch_id)?.name || '',
           expense.category,
           expense.description,
           expense.amount,
@@ -416,8 +414,8 @@ export default function AdminFinancialsPage() {
             estimated cost of goods.
           </Typography>
         </Box>
-        {!isSuperAdmin && !branches.length && branchesLoaded && (
-          <Alert severity="info">No assigned branches are available for financial monitoring.</Alert>
+        {!isAdmin && !branches.length && branchesLoaded && (
+          <Alert severity="info">No store details are available for financial monitoring.</Alert>
         )}
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Stack
@@ -426,25 +424,7 @@ export default function AdminFinancialsPage() {
             useFlexGap
             sx={{ alignItems: { md: 'center' }, flexWrap: { md: 'wrap' } }}
           >
-            <FormControl fullWidth={false} sx={{ width: { xs: '100%', sm: 220 }, flexShrink: 0 }}>
-              <InputLabel id="financials-branch-label">Branch</InputLabel>
-              <Select
-                labelId="financials-branch-label"
-                label="Branch"
-                value={branchId}
-                onChange={(event) => {
-                  setIsLoading(true)
-                  setErrorMessage('')
-                  setExpensePage(0)
-                  setBranchId(event.target.value)
-                }}
-              >
-                {isSuperAdmin && <MenuItem value="">All branches</MenuItem>}
-                {branches.map((branch) => (
-                  <MenuItem key={branch.id} value={branch.id}>{branch.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+
             <TextField
               fullWidth={false}
               label="From"
@@ -660,7 +640,7 @@ export default function AdminFinancialsPage() {
                   <DialogContent dividers>
                 <Stack spacing={2}>
                   {!branchId && (
-                    <Alert severity="info">Select one branch to record an expense. Expenses are branch-specific.</Alert>
+                    <Alert severity="info">Store details are unavailable. Reload the page to record an expense.</Alert>
                   )}
                   <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
                     <TextField
@@ -728,7 +708,6 @@ export default function AdminFinancialsPage() {
                     <TableHead>
                       <TableRow>
                         <TableCell>Date</TableCell>
-                        <TableCell>Branch</TableCell>
                         <TableCell>Category</TableCell>
                         <TableCell>Description</TableCell>
                         <TableCell>Note</TableCell>
@@ -741,7 +720,6 @@ export default function AdminFinancialsPage() {
                       {expenses.map((expense) => (
                         <TableRow key={expense.id} hover>
                           <TableCell>{expense.occurred_on}</TableCell>
-                          <TableCell>{branches.find((branch) => branch.id === expense.branch_id)?.name || '—'}</TableCell>
                           <TableCell>{label(expense.category)}</TableCell>
                           <TableCell>{expense.description}</TableCell>
                           <TableCell>{expense.note || '—'}</TableCell>

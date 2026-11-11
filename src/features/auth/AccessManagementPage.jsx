@@ -36,8 +36,7 @@ const DEFAULT_ACCOUNT_PAGE_SIZE = 10
 const roles = [
   { value: 'customer', label: 'Customer' },
   { value: 'staff', label: 'Staff' },
-  { value: 'branch_admin', label: 'Branch admin' },
-  { value: 'super_admin', label: 'Super Admin' },
+  { value: 'admin', label: 'Admin' },
 ]
 
 function unwrap(result) {
@@ -51,16 +50,13 @@ export default function AccessManagementPage() {
   const [branches, setBranches] = useState([])
   const [permissions, setPermissions] = useState([])
   const [userRoles, setUserRoles] = useState([])
-  const [assignments, setAssignments] = useState([])
   const [userPermissions, setUserPermissions] = useState([])
   const [selectedUserId, setSelectedUserId] = useState('')
   const [selectedRole, setSelectedRole] = useState('customer')
-  const [selectedBranches, setSelectedBranches] = useState([])
   const [selectedPermissions, setSelectedPermissions] = useState([])
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteName, setInviteName] = useState('')
   const [inviteRole, setInviteRole] = useState('customer')
-  const [inviteBranches, setInviteBranches] = useState([])
   const [invitePermissions, setInvitePermissions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -89,10 +85,9 @@ export default function AccessManagementPage() {
           .from('profiles')
           .select('id, email, display_name, is_active')
           .order('display_name'),
-        supabase.from('branches').select('id, name, is_active').order('name'),
+        supabase.rpc('get_store_branch'),
         supabase.from('permissions').select('id, module_id, action').order('module_id'),
         supabase.from('user_roles').select('user_id, role'),
-        supabase.from('user_branch_assignments').select('user_id, branch_id'),
         supabase.from('user_permissions').select('user_id, branch_id, permission_id'),
       ])
 
@@ -101,7 +96,6 @@ export default function AccessManagementPage() {
         loadedBranches,
         loadedPermissions,
         loadedRoles,
-        loadedAssignments,
         loadedUserPermissions,
       ] = results.map(unwrap)
 
@@ -110,7 +104,6 @@ export default function AccessManagementPage() {
       setBranches(loadedBranches)
       setPermissions(loadedPermissions)
       setUserRoles(loadedRoles)
-      setAssignments(loadedAssignments)
       setUserPermissions(loadedUserPermissions)
 
       if (!selectedUserIdRef.current && loadedUsers.length) {
@@ -118,11 +111,6 @@ export default function AccessManagementPage() {
         setSelectedUserId(firstUserId)
         setSelectedRole(
           loadedRoles.find((userRole) => userRole.user_id === firstUserId)?.role || 'customer',
-        )
-        setSelectedBranches(
-          loadedAssignments
-            .filter((assignment) => assignment.user_id === firstUserId)
-            .map((assignment) => assignment.branch_id),
         )
         setSelectedPermissions(
           [
@@ -179,9 +167,6 @@ export default function AccessManagementPage() {
   const currentRoles = userRoles
     .filter((userRole) => userRole.user_id === selectedUserId)
     .map((userRole) => userRole.role)
-  const currentBranches = assignments
-    .filter((assignment) => assignment.user_id === selectedUserId)
-    .map((assignment) => assignment.branch_id)
   const currentPermissionIds = [
     ...new Set(
       userPermissions
@@ -198,7 +183,7 @@ export default function AccessManagementPage() {
     [permissions],
   )
   const allPermissionIds = permissions.map((permission) => permission.id)
-  const inviteNeedsBranchAccess = inviteRole === 'staff' || inviteRole === 'branch_admin'
+  const inviteNeedsBranchAccess = inviteRole === 'staff'
   const allPermissionsSelected =
     allPermissionIds.length > 0 &&
     allPermissionIds.every((permissionId) => selectedPermissions.includes(permissionId))
@@ -211,7 +196,7 @@ export default function AccessManagementPage() {
   const someInvitePermissionsSelected = invitePermissions.some((permissionId) =>
     allPermissionIds.includes(permissionId),
   )
-  const needsBranchAccess = selectedRole === 'staff' || selectedRole === 'branch_admin'
+  const needsBranchAccess = selectedRole === 'staff'
 
   function toggleSelection(value, selected, setSelected) {
     setSelected(
@@ -224,11 +209,11 @@ export default function AccessManagementPage() {
   async function saveAccess() {
     if (!selectedUserId || !selectedUser) return
     if (selectedUserId === account.id) {
-      setErrorMessage('For safety, Super Admins cannot change their own access.')
+      setErrorMessage('For safety, Admins cannot change their own access.')
       return
     }
-    if (needsBranchAccess && selectedBranches.length === 0) {
-      setErrorMessage('Assign at least one branch to this staff account.')
+    if (needsBranchAccess && !branches.length) {
+      setErrorMessage('Store details are unavailable. Please refresh and try again.')
       return
     }
 
@@ -242,7 +227,7 @@ export default function AccessManagementPage() {
       const { error } = await supabase.rpc('admin_set_staff_access', {
         target_user_id: selectedUserId,
         new_role: selectedRole,
-        branch_ids: needsBranchAccess ? selectedBranches : [],
+        branch_ids: needsBranchAccess ? branches.map((store) => store.id) : [],
         permission_ids: needsBranchAccess ? selectedPermissions : [],
       })
       if (error) throw error
@@ -259,7 +244,7 @@ export default function AccessManagementPage() {
       setErrorMessage(
         error.message === 'You cannot change your own account access.'
           ? error.message
-          : 'Access settings could not be saved. Check that you are a Super Admin and review the selected branches and permissions.',
+          : 'Access settings could not be saved. Check that you are an Admin and review the selected permissions.',
       )
     } finally {
       setIsSaving(false)
@@ -271,8 +256,8 @@ export default function AccessManagementPage() {
       setErrorMessage('Enter the user’s name and email address.')
       return
     }
-    if (inviteNeedsBranchAccess && inviteBranches.length === 0) {
-      setErrorMessage('Assign at least one branch to this staff account.')
+    if (inviteNeedsBranchAccess && !branches.length) {
+      setErrorMessage('Store details are unavailable. Please refresh and try again.')
       return
     }
 
@@ -286,7 +271,7 @@ export default function AccessManagementPage() {
         target_email: inviteEmail.trim(),
         target_display_name: inviteName.trim(),
         new_role: inviteRole,
-        branch_ids: inviteNeedsBranchAccess ? inviteBranches : [],
+        branch_ids: inviteNeedsBranchAccess ? branches.map((store) => store.id) : [],
         permission_ids: inviteNeedsBranchAccess ? invitePermissions : [],
       })
       if (error) throw error
@@ -295,7 +280,7 @@ export default function AccessManagementPage() {
       const actionMessage =
         data === 'updated'
           ? `Access updated for ${inviteEmail.trim()}.`
-          : `Access saved for ${inviteEmail.trim()}. The selected role will apply when they first sign in with that Google email.`
+          : `Access saved for ${inviteEmail.trim()}. The selected role will apply when they create and verify an account with that email.`
       setSuccessMessage(
         refreshed
           ? actionMessage
@@ -303,14 +288,13 @@ export default function AccessManagementPage() {
       )
       setInviteEmail('')
       setInviteName('')
-      setInviteBranches([])
       setInvitePermissions([])
       setInviteDialogOpen(false)
     } catch (error) {
       console.error('Unable to add account access by email.', error)
       setErrorMessage(
         error.message ||
-          'The account could not be added. Confirm that you are a Super Admin, the email is valid, and branch access is configured correctly.',
+          'The account could not be added. Confirm that you are an Admin, the email is valid, and permissions are configured correctly.',
       )
     } finally {
       setIsInviting(false)
@@ -349,7 +333,7 @@ export default function AccessManagementPage() {
       setAccountToDelete(null)
       setErrorMessage(
         error.message ||
-          'The account could not be deleted. Confirm that you are a Super Admin and that the account has no retained business records.',
+          'The account could not be deleted. Confirm that you are an Admin and that the account has no retained business records.',
       )
     } finally {
       setIsDeleting(false)
@@ -370,11 +354,11 @@ export default function AccessManagementPage() {
       <Stack spacing={3}>
         <Box>
           <Typography variant="overline" color="primary">
-            Agapé Café · Super Admin
+            Agapé Café · Admin
           </Typography>
           <Typography variant="h2">Account Management</Typography>
           <Typography color="text.secondary">
-            Manage customer and staff accounts, assign roles, branch scope, and
+            Manage accounts, assign roles and
             module actions. Changes are applied atomically and written to the audit trail.
           </Typography>
         </Box>
@@ -389,7 +373,7 @@ export default function AccessManagementPage() {
           <Stack spacing={2.5}>
             <Box>
               <Typography color="text.secondary">
-                Existing accounts are updated immediately. New accounts receive this role at first Google sign-in.
+                Existing accounts are updated immediately. New accounts receive this role at sign-up with the invited email.
               </Typography>
             </Box>
             <TextField
@@ -417,8 +401,7 @@ export default function AccessManagementPage() {
                 onChange={(event) => {
                   const role = event.target.value
                   setInviteRole(role)
-                  if (role !== 'staff' && role !== 'branch_admin') {
-                    setInviteBranches([])
+                  if (role !== 'staff') {
                     setInvitePermissions([])
                   }
                 }}
@@ -432,33 +415,7 @@ export default function AccessManagementPage() {
             </FormControl>
             {inviteNeedsBranchAccess && (
               <>
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="h6" gutterBottom>
-                    Branch assignments
-                  </Typography>
-                  {!branches.length ? (
-                    <Typography color="text.secondary">
-                      Create a branch before assigning staff.
-                    </Typography>
-                  ) : (
-                    <FormGroup>
-                      {branches.map((branch) => (
-                        <FormControlLabel
-                          key={branch.id}
-                          control={
-                            <Checkbox
-                              checked={inviteBranches.includes(branch.id)}
-                              onChange={() =>
-                                toggleSelection(branch.id, inviteBranches, setInviteBranches)
-                              }
-                            />
-                          }
-                          label={`${branch.name}${branch.is_active ? '' : ' · Inactive'}`}
-                        />
-                      ))}
-                    </FormGroup>
-                  )}
-                </Paper>
+
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="h6">Module permissions</Typography>
                   <FormControlLabel
@@ -480,7 +437,7 @@ export default function AccessManagementPage() {
                     label="Select all module permissions"
                   />
                   <Typography color="text.secondary" sx={{ mb: 2 }}>
-                    Selected actions apply to every assigned branch.
+                    Selected actions apply to the store.
                   </Typography>
                   <Box
                     sx={{
@@ -590,7 +547,6 @@ export default function AccessManagementPage() {
                         <TableCell>Name</TableCell>
                         <TableCell>Email</TableCell>
                         <TableCell>Role</TableCell>
-                        <TableCell>Branches</TableCell>
                         <TableCell>Status</TableCell>
                         <TableCell align="right">Action</TableCell>
                       </TableRow>
@@ -598,16 +554,11 @@ export default function AccessManagementPage() {
                     <TableBody>
                       {pageUsers.map((user) => {
                         const role = userRoles.find((userRole) => userRole.user_id === user.id)?.role || 'customer'
-                        const branchNames = assignments
-                          .filter((assignment) => assignment.user_id === user.id)
-                          .map((assignment) => branches.find((branch) => branch.id === assignment.branch_id)?.name)
-                          .filter(Boolean)
                         return (
                           <TableRow key={user.id} hover>
                             <TableCell sx={{ fontWeight: 700 }}>{user.display_name || '—'}</TableCell>
                             <TableCell>{user.email || '—'}</TableCell>
                             <TableCell>{roles.find((item) => item.value === role)?.label || role}</TableCell>
-                            <TableCell>{branchNames.join(', ') || 'All / none'}</TableCell>
                             <TableCell>{user.is_active ? 'Active' : 'Deactivated'}</TableCell>
                             <TableCell align="right">
                               <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -618,9 +569,6 @@ export default function AccessManagementPage() {
                                   onClick={() => {
                                     setSelectedUserId(user.id)
                                     setSelectedRole(role)
-                                    setSelectedBranches(assignments
-                                      .filter((assignment) => assignment.user_id === user.id)
-                                      .map((assignment) => assignment.branch_id))
                                     setSelectedPermissions([...new Set(userPermissions
                                       .filter((permission) => permission.user_id === user.id)
                                       .map((permission) => permission.permission_id))])
@@ -672,7 +620,7 @@ export default function AccessManagementPage() {
                 <Stack spacing={2.5} sx={{ pt: 1 }}>
             {selectedUserId === account.id && (
               <Alert severity="info">
-                Your own Super Admin access is protected from changes here.
+                Your own Admin access is protected from changes here.
               </Alert>
             )}
             <FormControl fullWidth>
@@ -692,36 +640,7 @@ export default function AccessManagementPage() {
             </FormControl>
             {needsBranchAccess && (
               <>
-                <Paper variant="outlined" sx={{ p: 2.5 }}>
-                  <Typography variant="h6" gutterBottom>
-                    Branch assignments
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Staff can view orders and reports only for the branch or branches selected here.
-                  </Typography>
-                  {!branches.length ? (
-                    <Typography color="text.secondary">
-                      Create an active branch before assigning staff.
-                    </Typography>
-                  ) : (
-                    <FormGroup>
-                      {branches.map((branch) => (
-                        <FormControlLabel
-                          key={branch.id}
-                          control={
-                            <Checkbox
-                              checked={selectedBranches.includes(branch.id)}
-                              onChange={() =>
-                                toggleSelection(branch.id, selectedBranches, setSelectedBranches)
-                              }
-                            />
-                          }
-                          label={`${branch.name}${branch.is_active ? '' : ' · Inactive'}`}
-                        />
-                      ))}
-                    </FormGroup>
-                  )}
-                </Paper>
+
                 <Paper variant="outlined" sx={{ p: 2.5 }}>
                   <Typography variant="h6">Module permissions</Typography>
                   <FormControlLabel
@@ -739,7 +658,7 @@ export default function AccessManagementPage() {
                     label="Select all module permissions"
                   />
                   <Typography color="text.secondary" sx={{ mb: 2 }}>
-                    These actions apply to each assigned branch. A module is
+                    These actions apply to the store. A module is
                     not available unless View is granted.
                   </Typography>
                   <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, gap: 1.5 }}>
@@ -777,15 +696,14 @@ export default function AccessManagementPage() {
             )}
             {!needsBranchAccess && (
               <Alert severity="info">
-                {selectedRole === 'super_admin'
-                  ? 'Super Admins can access all branches and modules. Only another Super Admin can assign this role.'
-                  : 'Customer accounts do not receive branch or administrative module permissions.'}
+                {selectedRole === 'admin'
+                  ? 'Admins can access all modules. Only another Admin can assign this role.'
+                  : 'Customer accounts do not receive administrative module permissions.'}
               </Alert>
             )}
             {selectedUserId && (
               <Typography variant="body2" color="text.secondary">
-                Current access: {currentRoles.join(', ') || 'No role'}
-                {currentBranches.length ? ` · ${currentBranches.length} branch(es)` : ''}
+                Current access: {currentRoles.map((role) => roles.find((item) => item.value === role)?.label || role).join(', ') || 'No role'}
                 {currentPermissionIds.length
                   ? ` · ${currentPermissionIds.length} module permission(s)`
                   : ''}

@@ -50,7 +50,7 @@ function categorySlug(name) {
 
 function AdminMenuPage() {
   const { account } = useAuth()
-  const isSuperAdmin = account.roles.includes('super_admin')
+  const isAdmin = account.roles.includes('admin')
   const [branches, setBranches] = useState([])
   const [branchId, setBranchId] = useState('')
   const [menuView, setMenuView] = useState('branch')
@@ -130,7 +130,7 @@ function AdminMenuPage() {
     [filteredCategories, categoryPage, categoryPageSize],
   )
 
-  const canEditBranchMenu = isSuperAdmin || (
+  const canEditBranchMenu = isAdmin || (
     account.branchAssignments.some((assignment) => assignment.branch_id === branchId) &&
     account.permissions.some((permission) =>
       permission.branchId === branchId &&
@@ -192,9 +192,9 @@ function AdminMenuPage() {
           is_featured: product.is_featured,
           is_best_seller: product.is_best_seller,
         }])))
-        const assignedBranch = account.branchAssignments[0]?.branch_id
-        const firstActiveBranch = loadedBranches.find((branch) => branch.is_active)?.id
-        setBranchId((current) => current || (isSuperAdmin ? firstActiveBranch || '' : assignedBranch || ''))
+
+
+        setBranchId(loadedBranches[0]?.id || '')
       })
       .catch((error) => {
         console.error('Unable to load menu administration data.', error)
@@ -202,7 +202,7 @@ function AdminMenuPage() {
       })
       .finally(() => { if (active) setIsLoading(false) })
     return () => { active = false }
-  }, [account, isSuperAdmin, catalogReloadKey])
+  }, [account, isAdmin, catalogReloadKey])
 
   useEffect(() => {
     if (!branchId) {
@@ -577,7 +577,7 @@ function AdminMenuPage() {
 
   async function saveBranchOption(option, optionType) {
     if (!branchId || availabilityBranchId !== branchId) {
-      setErrorMessage('Wait for this branch’s menu settings to finish loading before saving.')
+      setErrorMessage('Wait for the store’s menu settings to finish loading before saving.')
       return
     }
     const key = `${optionType}:${option.id}`
@@ -613,7 +613,7 @@ function AdminMenuPage() {
       }
       setBranchOptionSettings((current) => ({ ...current, [key]: saved }))
       setBranchOptionEdits((current) => ({ ...current, [key]: saved }))
-      setSuccessMessage(`${option.name} settings saved for this branch.`)
+      setSuccessMessage(`${option.name} settings saved for the store.`)
     } catch (error) {
       console.error('Unable to save branch-specific menu option settings.', error)
       setErrorMessage(error.message)
@@ -631,9 +631,9 @@ function AdminMenuPage() {
           <Box>
             <Typography variant="overline" color="primary">Agapé Café · Catalog</Typography>
             <Typography variant="h2">Menu</Typography>
-            <Typography color="text.secondary">Manage this branch’s prices, availability, options, add-ons, and flavors without changing other branches’ catalog.</Typography>
+            <Typography color="text.secondary">Manage the store’s prices, availability, options, add-ons, and flavors for the cafe.</Typography>
           </Box>
-          {isSuperAdmin && (menuView === 'catalog' || menuView === 'products') && (
+          {isAdmin && (menuView === 'catalog' || menuView === 'products') && (
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap sx={{ width: { xs: '100%', md: 'auto' }, flexWrap: 'wrap' }}>
               {menuView === 'catalog' && (
                 <Button
@@ -658,16 +658,7 @@ function AdminMenuPage() {
         </Stack>
         {errorMessage && <Alert severity="error">{errorMessage}</Alert>}
         {successMessage && <Alert severity="success">{successMessage}</Alert>}
-        {menuView === 'branch' && <FormControl fullWidth required>
-          <InputLabel id="menu-branch-label">Branch</InputLabel>
-          <Select labelId="menu-branch-label" label="Branch" value={branchId} onChange={(event) => {
-            setBranchOptionsProduct(null)
-            setAvailabilityBranchId('')
-            setBranchId(event.target.value)
-          }}>
-            {branches.filter((branch) => branch.is_active).map((branch) => <MenuItem key={branch.id} value={branch.id}>{branch.name}</MenuItem>)}
-          </Select>
-        </FormControl>}
+
         <Tabs
           value={menuView}
           onChange={(_, value) => {
@@ -681,22 +672,22 @@ function AdminMenuPage() {
           }}
           aria-label="Menu management sections"
         >
-          <Tab value="branch" label="Branch menu editor" />
-          {isSuperAdmin && <Tab value="catalog" label="Catalog" />}
-          {isSuperAdmin && <Tab value="products" label="Product list" />}
+          <Tab value="branch" label="Menu availability" />
+          {isAdmin && <Tab value="catalog" label="Catalog" />}
+          {isAdmin && <Tab value="products" label="Product list" />}
         </Tabs>
         {menuView === 'branch' && (
           <Alert severity="info">
-            Edit branch prices and turn individual options, add-ons, or flavors on or off. These settings apply only to the selected branch; shared product details stay unchanged.
+            Set menu availability and prices for the store.
           </Alert>
         )}
         {menuView === 'branch' && !branches.some((branch) => branch.is_active) && (
-          <Alert severity="warning">Create or activate a branch before managing branch availability.</Alert>
+          <Alert severity="warning">Open the store in Store settings to manage menu availability.</Alert>
         )}
-        {menuView === 'branch' && !isSuperAdmin && !canEditBranchMenu && (
-          <Alert severity="warning">You need Menu edit permission for a branch to update availability.</Alert>
+        {menuView === 'branch' && !isAdmin && !canEditBranchMenu && (
+          <Alert severity="warning">You need Menu edit permission to update availability.</Alert>
         )}
-        {isSuperAdmin && menuView === 'catalog' && (
+        {isAdmin && menuView === 'catalog' && (
           <>
             <Box>
               <Typography variant="h6" sx={{ mb: 1 }}>Categories</Typography>
@@ -824,12 +815,12 @@ function AdminMenuPage() {
               />
             </Box>
             <TableContainer>
-              <Table aria-label="Branch menu availability and pricing" sx={{ minWidth: 760 }}>
+              <Table aria-label="Store menu availability and pricing" sx={{ minWidth: 760 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell>Product</TableCell>
                     <TableCell>Catalog price</TableCell>
-                    <TableCell>Branch price &amp; availability</TableCell>
+                    <TableCell>Price and availability</TableCell>
                     <TableCell align="right">Action</TableCell>
                   </TableRow>
                 </TableHead>
@@ -960,13 +951,13 @@ function AdminMenuPage() {
             maxWidth="md"
           >
             <DialogTitle>
-              Branch options, add-ons and flavors{branchOptionsProduct ? ` · ${branchOptionsProduct.name}` : ''}
+              Options, add-ons and flavors{branchOptionsProduct ? ` · ${branchOptionsProduct.name}` : ''}
             </DialogTitle>
             <DialogContent>
               <Stack spacing={3} sx={{ pt: 1 }}>
                 <Alert severity="info">
-                  These changes affect only {branches.find((branch) => branch.id === branchId)?.name || 'this branch'}.
-                  Leave a price blank to use the default; switch an option off to hide it from this branch’s menu.
+                  These changes apply to {branches.find((branch) => branch.id === branchId)?.name || 'the store'}.
+                  Leave a price blank to use the default; switch an option off to hide it from the store’s menu.
                 </Alert>
                 {[
                   {
@@ -975,7 +966,7 @@ function AdminMenuPage() {
                     options: variants.filter((option) =>
                       option.product_id === branchOptionsProduct?.id && option.is_active,
                     ),
-                    priceLabel: 'Branch option price',
+                    priceLabel: 'Option price',
                   },
                   {
                     type: 'addon',
@@ -983,7 +974,7 @@ function AdminMenuPage() {
                     options: addons.filter((option) =>
                       option.product_id === branchOptionsProduct?.id && option.is_active && option.option_kind !== 'flavor',
                     ),
-                    priceLabel: 'Branch add-on price',
+                    priceLabel: 'Add-on price',
                   },
                   {
                     type: 'addon',
@@ -991,7 +982,7 @@ function AdminMenuPage() {
                     options: addons.filter((option) =>
                       option.product_id === branchOptionsProduct?.id && option.is_active && option.option_kind === 'flavor',
                     ),
-                    priceLabel: 'Branch flavor price',
+                    priceLabel: 'Flavor price',
                   },
                 ].filter((group) => group.options.length > 0).map((group) => (
                   <Stack key={group.title} spacing={1}>
@@ -1024,7 +1015,7 @@ function AdminMenuPage() {
                             <Box sx={{ flex: 1 }}>
                               <Typography fontWeight={700}>{option.name}</Typography>
                               <Typography variant="body2" color="text.secondary">
-                                Default for this branch: {formatPrice(defaultPrice)}
+                                Default for the store: {formatPrice(defaultPrice)}
                               </Typography>
                             </Box>
                             <TextField
@@ -1078,7 +1069,7 @@ function AdminMenuPage() {
             </DialogActions>
           </Dialog>
         )}
-        {menuView === 'products' && isSuperAdmin && <>
+        {menuView === 'products' && isAdmin && <>
           <Dialog open={productDialogOpen} onClose={() => !isSaving && setProductDialogOpen(false)} fullWidth maxWidth="sm">
             <Box component="form" onSubmit={createProduct}>
               <DialogTitle>Add menu product</DialogTitle>
@@ -1209,7 +1200,7 @@ function AdminMenuPage() {
                 <DialogTitle>Edit menu product · {product.name}</DialogTitle>
                 <DialogContent dividers>
                 <Stack spacing={2}>
-                  {isSuperAdmin && menuView === 'products' && (
+                  {isAdmin && menuView === 'products' && (
                     <>
                       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                         <TextField label="Name" value={edit.name || ''} onChange={(event) => setProductEdits((state) => ({ ...state, [product.id]: { ...state[product.id], name: event.target.value } }))} />

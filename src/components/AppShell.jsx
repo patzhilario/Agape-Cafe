@@ -1,3 +1,4 @@
+import CustomerNotifications from '../features/orders/CustomerNotifications.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, AppBar, Badge, Box, Button, Container, Divider, Drawer, Grid, IconButton, Snackbar, Stack, Toolbar, Typography, useMediaQuery, useTheme } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
@@ -21,12 +22,12 @@ const currentYear = new Date().getFullYear()
 const navigation = [
   { label: 'Home', to: '/' },
   { label: 'Menu', to: '/menu' },
-  { label: 'Branches', to: '/branches' },
+  { label: 'Visit us', to: '/visit' },
   { label: 'About', to: '/about' },
 ]
 
 export default function AppShell({ children }) {
-  const { account, isLoading, signOut } = useAuth()
+  const { account, isLoading, signOut, canAccessWorkspace } = useAuth()
   const { totalQuantity, isCartOpen, openCart, closeCart } = useCart()
   const location = useLocation()
   const theme = useTheme()
@@ -127,8 +128,8 @@ export default function AppShell({ children }) {
                     size="small"
                     sx={{ minHeight: 40, px: 1.5, whiteSpace: 'nowrap' }}
                   >
-                    {account.roles.some((role) => ['super_admin', 'branch_admin', 'staff'].includes(role))
-                      ? 'Admin workspace'
+                    {canAccessWorkspace()
+                      ? 'Workspace'
                       : 'My account'}
                   </Button>
                   <Button
@@ -141,24 +142,26 @@ export default function AppShell({ children }) {
                   </Button>
                 </>
               ) : (
-                <Button
-                  component={RouterLink}
-                  to="/auth/sign-in"
-                  color="primary"
-                  size="small"
-                  disabled={isLoading}
-                  variant="outlined"
-                  sx={{
-                    minHeight: 40,
-                    px: 2,
-                    ml: 0.75,
-                    whiteSpace: 'nowrap',
-                    borderWidth: 1.5,
-                    '&:hover': { borderWidth: 1.5, bgcolor: 'rgba(91, 57, 39, 0.06)' },
-                  }}
-                >
-                  Sign in
-                </Button>
+                <>
+                  <Button
+                    component={RouterLink}
+                    to="/auth/sign-in"
+                    color="primary"
+                    size="small"
+                    disabled={isLoading}
+                    variant="outlined"
+                    sx={{
+                      minHeight: 40,
+                      px: 2,
+                      ml: 0.75,
+                      whiteSpace: 'nowrap',
+                      borderWidth: 1.5,
+                      '&:hover': { borderWidth: 1.5, bgcolor: 'rgba(91, 57, 39, 0.06)' },
+                    }}
+                  >
+                    Login
+                  </Button>
+                </>
               )}
               <IconButton
                 onClick={openCart}
@@ -179,6 +182,7 @@ export default function AppShell({ children }) {
                 </Badge>
               </IconButton>
             </Stack>}
+            {account?.roles.includes('customer') && <CustomerNotifications key={account.id} customerId={account.id} />}
             {isMobile && (
               <IconButton
                 ref={mobileNavigationButtonRef}
@@ -237,8 +241,8 @@ export default function AppShell({ children }) {
                 onClick={closeNavigation}
                 sx={{ justifyContent: 'flex-start', minHeight: 44 }}
               >
-                {account.roles.some((role) => ['super_admin', 'branch_admin', 'staff'].includes(role))
-                  ? 'Admin workspace'
+                {canAccessWorkspace()
+                  ? 'Workspace'
                   : 'My account'}
               </Button>
               <Button
@@ -253,17 +257,19 @@ export default function AppShell({ children }) {
               </Button>
             </>
           ) : (
-            <Button
-              component={RouterLink}
-              to="/auth/sign-in"
-              color="primary"
-              variant="contained"
-              disabled={isLoading}
-              onClick={closeNavigation}
-              sx={{ justifyContent: 'flex-start', minHeight: 44, mt: 1 }}
-            >
-              Sign in
-            </Button>
+            <>
+              <Button
+                component={RouterLink}
+                to="/auth/sign-in"
+                color="primary"
+                variant="contained"
+                disabled={isLoading}
+                onClick={closeNavigation}
+                sx={{ justifyContent: 'flex-start', minHeight: 44, mt: 1 }}
+              >
+                Login
+              </Button>
+            </>
           )}
           <Button
             color="primary"
@@ -299,7 +305,7 @@ export default function AppShell({ children }) {
         <Container maxWidth="lg" sx={{ px: { xs: 2.5, sm: 3, md: 4 } }}>
           <Grid container spacing={{ xs: 3.5, sm: 4, md: 4 }}>
             {/* Column 1: Brand & Bio */}
-            <Grid item xs={12} md={4.5}>
+            <Grid size={{ xs: 12, md: 4.5 }}>
               <Stack spacing={2}>
                 <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
                   <Box
@@ -398,7 +404,7 @@ export default function AppShell({ children }) {
             </Grid>
 
             {/* Column 2: Quick Links */}
-            <Grid item xs={6} sm={4} md={2.5}>
+            <Grid size={{ xs: 6, sm: 4, md: 2.5 }}>
               <Typography
                 variant="caption"
                 sx={{
@@ -451,7 +457,7 @@ export default function AppShell({ children }) {
                 </Button>
                 <Button
                   component={RouterLink}
-                  to="/branches"
+                  to="/visit"
                   color="inherit"
                   sx={{
                     justifyContent: 'flex-start',
@@ -465,7 +471,7 @@ export default function AppShell({ children }) {
                     transition: 'all 0.2s ease',
                   }}
                 >
-                  Branches & Locations
+                  Visit us
                 </Button>
                 <Button
                   component={RouterLink}
@@ -502,35 +508,45 @@ export default function AppShell({ children }) {
                       transition: 'all 0.2s ease',
                     }}
                   >
-                    {account.roles.some((role) => ['super_admin', 'branch_admin', 'staff'].includes(role))
-                      ? 'Admin Workspace'
+                    {canAccessWorkspace()
+                      ? 'Workspace'
                       : 'My Account'}
                   </Button>
                 ) : (
-                  <Button
-                    component={RouterLink}
-                    to="/auth/sign-in"
-                    color="inherit"
-                    sx={{
-                      justifyContent: 'flex-start',
-                      p: 0,
-                      minHeight: 'auto',
-                      color: 'rgba(255,250,244,0.78)',
-                      fontSize: '0.875rem',
-                      fontWeight: 400,
-                      textTransform: 'none',
-                      '&:hover': { color: '#d8b18a', bgcolor: 'transparent', pl: 0.5 },
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    Sign In / Register
-                  </Button>
+                  <>
+                    <Button
+                      component={RouterLink}
+                      to="/auth/sign-in"
+                      color="inherit"
+                      sx={{
+                        justifyContent: 'flex-start',
+                        p: 0,
+                        minHeight: 'auto',
+                        color: 'rgba(255,250,244,0.78)',
+                        fontSize: '0.875rem',
+                        fontWeight: 400,
+                        textTransform: 'none',
+                        '&:hover': { color: '#d8b18a', bgcolor: 'transparent', pl: 0.5 },
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      Sign In
+                    </Button>
+                    <Button
+                      component={RouterLink}
+                      to="/auth/sign-up"
+                      color="inherit"
+                      sx={{ justifyContent: 'flex-start', p: 0, minHeight: 'auto', fontSize: '0.875rem', textTransform: 'none' }}
+                    >
+                      Sign Up
+                    </Button>
+                  </>
                 )}
               </Stack>
             </Grid>
 
             {/* Column 3: Hours & Service */}
-            <Grid item xs={6} sm={4} md={2.5}>
+            <Grid size={{ xs: 6, sm: 4, md: 2.5 }}>
               <Typography
                 variant="caption"
                 sx={{
@@ -568,13 +584,13 @@ export default function AppShell({ children }) {
                   </Box>
                 </Stack>
                 <Typography variant="caption" sx={{ color: 'rgba(255,250,244,0.52)', pt: 0.5, fontStyle: 'italic', display: 'block' }}>
-                  Dine-in, pickup & delivery
+                  Dine-in, pick-up & delivery
                 </Typography>
               </Stack>
             </Grid>
 
             {/* Column 4: Contact & Location */}
-            <Grid item xs={12} sm={4} md={2.5}>
+            <Grid size={{ xs: 12, sm: 4, md: 2.5 }}>
               <Typography
                 variant="caption"
                 sx={{
@@ -592,7 +608,7 @@ export default function AppShell({ children }) {
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
                   <LocationOnOutlinedIcon sx={{ fontSize: 17, color: '#d8b18a', mt: 0.3, flexShrink: 0 }} />
                   <Typography variant="body2" sx={{ color: 'rgba(255,250,244,0.75)', lineHeight: 1.5, fontSize: '0.875rem' }}>
-                    Branches in Calamba and Sto. Tomas
+                    Calamba, Laguna
                   </Typography>
                 </Stack>
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
@@ -663,7 +679,7 @@ export default function AppShell({ children }) {
               </Typography>
               <Typography
                 component={RouterLink}
-                to="/branches"
+                to="/visit"
                 variant="caption"
                 sx={{
                   color: 'rgba(255,250,244,0.6)',
@@ -672,7 +688,7 @@ export default function AppShell({ children }) {
                   '&:hover': { color: '#d8b18a' },
                 }}
               >
-                Branches
+                Visit us
               </Typography>
               <Typography
                 component={RouterLink}
