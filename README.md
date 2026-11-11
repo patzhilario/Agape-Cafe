@@ -128,6 +128,25 @@ shared `/receipt/:orderId` route. Receipt access follows order RLS. Printed outp
 contains only the receipt, with no site navigation or QR code. Match paper size
 in the printer dialog and disable browser headers/footers when needed.
 
+## Current schema cleanup
+
+Run `supabase/audit_schema_cleanup.sql` to inspect the live schema without changing
+records. After all earlier migrations, apply
+`supabase/migrations/20261111120000_clean_public_schema.sql` once, then deploy the
+frontend. The repository's expected public schema shrinks from 44 to 33 tables.
+Six legacy tables move to `app_archive`; five backend/security tables move to
+`app_private`. Ten unused functions and two obsolete columns are removed.
+Historical table assignments and branch-level QR paths are preserved in
+`app_archive.retired_fields`. Financial reporting, signup/invites and current
+order/POS/payment rules continue through the same public RPCs.
+
+See [the schema guide](supabase/SCHEMA_GUIDE.md) for the complete table inventory,
+required objects and migration order. Do not expose the private/archive schemas
+to the API or rerun the full setup on an existing database. The cleanup is
+transactional and stops on unreviewed function/view dependencies; it uses no CASCADE.
+The full setup includes this cleanup last for new installations. Initial Admin
+provisioning should be run after all current migrations.
+
 ## Proposed project structure
 
 ```text

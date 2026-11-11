@@ -1,5 +1,5 @@
 -- Set target_email to the initial Admin's email and run this once in
--- the Supabase SQL Editor after applying the account roles migration.
+-- the Supabase SQL Editor after applying all current migrations, including schema cleanup.
 begin;
 
 do $$
@@ -22,7 +22,7 @@ begin
   end if;
 
   if exists (
-    select 1 from public.pending_user_access where role = 'admin' and email <> normalized_email
+    select 1 from app_private.pending_user_access where role = 'admin' and email <> normalized_email
   ) then
     raise exception 'A different initial Admin email is already configured.';
   end if;
@@ -32,7 +32,7 @@ begin
   where lower(email) = normalized_email;
 
   if target_user_id is null then
-    insert into public.pending_user_access (email, display_name, role)
+    insert into app_private.pending_user_access (email, display_name, role)
     values (normalized_email, target_display_name, 'admin')
     on conflict (email) do update
     set display_name = excluded.display_name,
@@ -53,7 +53,7 @@ begin
   where id = target_user_id
   on conflict (id) do nothing;
 
-  delete from public.pending_user_access where email = normalized_email;
+  delete from app_private.pending_user_access where email = normalized_email;
   delete from public.user_branch_assignments where user_id = target_user_id;
   delete from public.user_roles where user_id = target_user_id;
   insert into public.user_roles (user_id, role)

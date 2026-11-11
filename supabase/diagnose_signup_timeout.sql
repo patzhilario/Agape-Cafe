@@ -29,6 +29,7 @@ where not trigger.tgisinternal
   and (
     (table_schema.nspname = 'auth' and relation.relname = 'users')
     or (table_schema.nspname = 'public'
-      and relation.relname in ('profiles', 'user_roles', 'pending_user_access'))
+      and relation.relname in ('profiles', 'user_roles'))
+    or (table_schema.nspname = 'app_private' and relation.relname = 'pending_user_access')
   )
 order by table_schema.nspname, relation.relname, trigger.tgname;

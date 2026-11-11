@@ -118,7 +118,7 @@ export async function getCustomerOrder(orderId) {
       id, order_number, branch_id, customer_name, customer_email, customer_phone,
       fulfillment_method, customer_note, delivery_address, delivery_fee, status, payment_status,
       subtotal, discount_total, total, promotion_id, created_at, cancellation_reason,
-      branch:branches(name, address, phone, gcash_qr_path),
+      branch:branches(name, address, phone),
       items:order_items(
         id, product_name, product_sku, variant_name, quantity, serving_type,
         unit_price, line_subtotal, discount_amount, line_total,
