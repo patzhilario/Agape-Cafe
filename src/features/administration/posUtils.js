@@ -13,6 +13,16 @@ export function defaultPOSItem(product) {
   }
 }
 
+export function limitPOSBenefitItems(items) {
+  const selectedTypes = new Set()
+  return items.map((item) => {
+    const eligible = ['food', 'drink'].includes(item.categoryType) &&
+      item.quantity > 0 && item.eligibleQuantity > 0 && !selectedTypes.has(item.categoryType)
+    if (eligible) selectedTypes.add(item.categoryType)
+    return { ...item, eligibleQuantity: eligible ? 1 : 0 }
+  })
+}
+
 export function mergePOSItems(items) {
   const merged = new Map()
   for (const item of items) {
@@ -25,13 +35,13 @@ export function mergePOSItems(items) {
     }
   }
   if (merged.size > 50 || [...merged.values()].some((item) => item.quantity > 20)) throw new Error('Each configured item can have up to 20 units, across at most 50 order lines.')
-  return [...merged.values()]
+  return limitPOSBenefitItems([...merged.values()])
 }
 
 export function estimatePOSDiscount(items, discountType, policy, promotion) {
   if (discountType === 'pwd' || discountType === 'senior_citizen') {
     if (!policy?.is_active || policy.vat_registration === 'not_configured') return 0
-    return roundMoney(items.reduce((sum, item) => {
+    return roundMoney(limitPOSBenefitItems(items).reduce((sum, item) => {
       const eligible = Math.min(item.quantity, item.eligibleQuantity || 0)
       const gross = roundMoney(posUnitPrice(item) * eligible)
       const net = roundMoney(gross / (1 + Number(policy.vat_rate) / 100))
