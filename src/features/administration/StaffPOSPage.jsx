@@ -31,7 +31,6 @@ export default function StaffPOSPage() {
   const [items, setItems] = useState([])
   const [expandedKey, setExpandedKey] = useState('')
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
   const [fulfillment, setFulfillment] = useState('dine_in')
   const [address, setAddress] = useState('')
   const [methodId, setMethodId] = useState('')
@@ -99,7 +98,7 @@ export default function StaffPOSPage() {
   }
   function newSale() {
     if (saving || uncertain) return
-    setSale(null); setReceiptError(''); setItems([]); setName(''); setPhone(''); setAddress(''); setFulfillment('dine_in')
+    setSale(null); setReceiptError(''); setItems([]); setName(''); setAddress(''); setFulfillment('dine_in')
     setCashReceived(''); setQrVerified(false); setDiscountType('none'); setPromotionId(''); setBeneficiaryName(''); setBeneficiaryId(''); setIdVerified(false); setError(''); setExpandedKey(''); attempt.current = null
     setReloadKey((value) => value + 1)
   }
@@ -115,7 +114,7 @@ export default function StaffPOSPage() {
     event.preventDefault(); setError('')
     if (!canPay) { setError('Ask the Admin for Orders edit permission to take payment.'); return }
     if (!store?.is_active || !items.length || !selectedMethod) { setError('The store must be open, with items and a payment method selected.'); return }
-    if (fulfillment === 'delivery' && (!/^[+()\d\s.-]{7,40}$/.test(phone.trim()) || address.trim().length < 8)) { setError('Enter a delivery address and contact phone.'); return }
+    if (fulfillment === 'delivery' && address.trim().length < 8) { setError('Enter a delivery address.'); return }
     if (isCash && (!/^\d{1,10}(\.\d{1,2})?$/.test(cashReceived) || Number(cashReceived) < total)) { setError('Enter cash received covering the total.'); return }
     if (!isCash && !qrVerified) { setError('Verify the QR payment against the store account first.'); return }
     if (benefit) {
@@ -124,7 +123,7 @@ export default function StaffPOSPage() {
       if (['drink', 'food'].some((type) => items.filter((item) => item.categoryType === type).reduce((sum, item) => sum + item.eligibleQuantity, 0) > 1)) { setError('Select at most one drink and one food for the beneficiary.'); return }
     }
     const payload = {
-      guest_name: name.trim(), guest_phone: phone.trim(), fulfillment, method_id: methodId,
+      guest_name: name.trim(), guest_phone: '', fulfillment, method_id: methodId,
       cart_items: items.map((item) => ({ product_id: item.productId, variant_id: item.variantId || null, addon_ids: item.addons.map((addon) => addon.id), quantity: item.quantity, serving_type: item.servingType, eligible_quantity: benefit ? item.eligibleQuantity : 0 })),
       quoted_total: total, expected_delivery_fee: fee, cash_tendered: isCash ? Number(cashReceived) : null, qr_verified: !isCash && qrVerified,
       delivery_address: fulfillment === 'delivery' ? address.trim() : null, promotion_id: discountType === 'promotion' ? promotionId || null : null,
@@ -196,8 +195,8 @@ export default function StaffPOSPage() {
               </Stack></Collapse>
               {benefit && ['food','drink'].includes(item.categoryType) && <FormControlLabel control={<Checkbox checked={item.eligibleQuantity>0} disabled={locked || (item.eligibleQuantity===0 && items.some((other)=>other.categoryType===item.categoryType && other.eligibleQuantity>0))} onChange={(event)=>updateItem(index,{eligibleQuantity:event.target.checked?1:0})} />} label={`Discount 1 ${item.categoryType} for beneficiary`} />}
             </Box> })}
-            <TextField select size="small" label="Order type" value={fulfillment} disabled={locked} onChange={(event)=>setFulfillment(event.target.value)}><MenuItem value="dine_in">Dine-in</MenuItem><MenuItem value="pickup">Pick-up</MenuItem><MenuItem value="delivery">Delivery</MenuItem></TextField>
-            <Stack direction={{ xs:'column',sm:'row' }} spacing={1}><TextField fullWidth size="small" label="Customer name (optional)" value={name} disabled={locked} onChange={(event)=>setName(event.target.value)} slotProps={{htmlInput:{maxLength:120}}} /><TextField fullWidth size="small" label={fulfillment==='delivery'?'Contact phone':'Phone (optional)'} value={phone} required={fulfillment==='delivery'} disabled={locked} onChange={(event)=>setPhone(event.target.value)} slotProps={{htmlInput:{maxLength:40}}} /></Stack>
+            <TextField select size="small" label="Order type" value={fulfillment} disabled={locked} onChange={(event)=>setFulfillment(event.target.value)}><MenuItem value="dine_in">Dine-in</MenuItem><MenuItem value="pickup">Takeout</MenuItem><MenuItem value="delivery">Delivery</MenuItem></TextField>
+            <TextField fullWidth size="small" label="Customer name (optional)" value={name} disabled={locked} onChange={(event)=>setName(event.target.value)} slotProps={{htmlInput:{maxLength:120}}} />
             {fulfillment==='delivery' && <TextField size="small" label="Delivery address" value={address} onChange={(event)=>setAddress(event.target.value)} required disabled={locked} multiline slotProps={{htmlInput:{minLength:8,maxLength:500}}} />}
             <Divider />
             <TextField select size="small" label="Discount" value={discountType} disabled={locked} onChange={(event)=>{setDiscountType(event.target.value);setIdVerified(false)}}><MenuItem value="none">No discount</MenuItem><MenuItem value="promotion">Promotion</MenuItem><MenuItem value="pwd" disabled={!canBenefit || !policy?.is_active || !policy?.pwd_enabled || policy.vat_registration==='not_configured'}>PWD benefit</MenuItem><MenuItem value="senior_citizen" disabled={!canBenefit || !policy?.is_active || !policy?.senior_citizen_enabled || policy.vat_registration==='not_configured'}>Senior Citizen benefit</MenuItem></TextField>

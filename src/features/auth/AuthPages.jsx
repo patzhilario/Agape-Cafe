@@ -4,9 +4,11 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   CircularProgress,
   Container,
   Divider,
+  FormControlLabel,
   Paper,
   Stack,
   TextField,
@@ -16,6 +18,7 @@ import { getSupabaseClient } from '../../lib/supabaseClient.js'
 import { GoogleOneTap } from './GoogleOneTap.jsx'
 import { PasswordField } from './PasswordField.jsx'
 import { useAuth } from './useAuth.js'
+import DataPolicyDialog, { DATA_POLICY_VERSION } from './DataPolicyDialog.jsx'
 
 function LoadingState({ label }) {
   return (
@@ -89,6 +92,8 @@ function CredentialsPage({ isSignUp = false, isRecovery = false }) {
   const [notice, setNotice] = useState(signUpResult?.notice || '')
   const [needsVerification, setNeedsVerification] = useState(Boolean(signUpResult?.needsVerification))
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [policyAccepted, setPolicyAccepted] = useState(false)
+  const [policyOpen, setPolicyOpen] = useState(false)
   const requestInFlight = useRef(false)
   const nextPath = searchParams.get('next') || '/'
   const nextQuery = new URLSearchParams({ next: nextPath }).toString()
@@ -118,6 +123,10 @@ function CredentialsPage({ isSignUp = false, isRecovery = false }) {
     setNotice('')
     if (isSignUp) {
       setNeedsVerification(false)
+      if (!policyAccepted) {
+        setFormError('Read and agree to the Data Policy before creating an account.')
+        return
+      }
       if (!/^[a-z0-9][a-z0-9_.]{2,29}$/.test(username)) {
         setFormError('Use 3 to 30 letters, numbers, periods, or underscores for your username. Start with a letter or number.')
         return
@@ -163,6 +172,8 @@ function CredentialsPage({ isSignUp = false, isRecovery = false }) {
               middle_initial: middleInitial,
               full_name: [firstName, middleInitial && middleInitial + '.', lastName].filter(Boolean).join(' '),
               signup_phone: phone,
+              data_policy_version: DATA_POLICY_VERSION,
+              data_policy_accepted_at: new Date().toISOString(),
             },
           },
         })
@@ -398,9 +409,17 @@ function CredentialsPage({ isSignUp = false, isRecovery = false }) {
         />
       )}
       {isSignUp && (
-        <Typography variant="body2" color="text.secondary">
-          We will email you a verification link. Verify your email before logging in.
-        </Typography>
+        <>
+          <FormControlLabel
+            sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: '.875rem' } }}
+            control={<Checkbox name="dataPolicyAccepted" checked={policyAccepted} onChange={() => setPolicyOpen(true)} required disabled={isSubmitting} slotProps={{ input: { 'aria-haspopup': 'dialog' } }} />}
+            label="I agree to the Data Policy."
+          />
+          <DataPolicyDialog open={policyOpen} onClose={() => setPolicyOpen(false)} accepted={policyAccepted} onAcceptedChange={setPolicyAccepted} />
+          <Typography variant="body2" color="text.secondary">
+            We will email you a verification link. Verify your email before logging in.
+          </Typography>
+        </>
       )}
       <Button type="submit" variant="contained" size="large" disabled={!isConfigured || isSubmitting}>
         {isSignUp ? 'Sign Up' : isRecovery ? 'Send password link' : 'Log in'}
