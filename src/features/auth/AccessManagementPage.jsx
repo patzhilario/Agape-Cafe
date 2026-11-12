@@ -181,7 +181,8 @@ export default function AccessManagementPage() {
         return groups
       }, {
         pos: permissions.filter((permission) =>
-          permission.module_id === 'orders' && ['view', 'create', 'edit'].includes(permission.action),
+          (permission.module_id === 'orders' && ['view', 'create', 'edit'].includes(permission.action)) ||
+          (permission.module_id === 'promotions' && permission.action === 'approve'),
         ),
       }),
     [permissions],
@@ -458,6 +459,11 @@ export default function AccessManagementPage() {
                         <Typography fontWeight={700} sx={{ textTransform: 'capitalize' }}>
                           {module === 'pos' ? 'POS' : module.replaceAll('_', ' ')}
                         </Typography>
+                        {module === 'pos' && (
+                          <Typography variant="caption" color="text.secondary">
+                            Approve allows PWD / Senior Citizen discounts (shared with Promotions).
+                          </Typography>
+                        )}
                         <FormGroup row>
                           {modulePermissions.map((permission) => (
                             <FormControlLabel
@@ -671,6 +677,11 @@ export default function AccessManagementPage() {
                         <Typography fontWeight={700} sx={{ textTransform: 'capitalize' }}>
                           {module === 'pos' ? 'POS' : module.replaceAll('_', ' ')}
                         </Typography>
+                        {module === 'pos' && (
+                          <Typography variant="caption" color="text.secondary">
+                            Approve allows PWD / Senior Citizen discounts (shared with Promotions).
+                          </Typography>
+                        )}
                         <FormGroup row>
                           {modulePermissions.map((permission) => (
                             <FormControlLabel
