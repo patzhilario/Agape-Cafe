@@ -179,7 +179,11 @@ export default function AccessManagementPage() {
       permissions.reduce((groups, permission) => {
         groups[permission.module_id] = [...(groups[permission.module_id] || []), permission]
         return groups
-      }, {}),
+      }, {
+        pos: permissions.filter((permission) =>
+          permission.module_id === 'orders' && ['view', 'create', 'edit'].includes(permission.action),
+        ),
+      }),
     [permissions],
   )
   const allPermissionIds = permissions.map((permission) => permission.id)
@@ -452,7 +456,7 @@ export default function AccessManagementPage() {
                     {Object.entries(permissionGroups).map(([module, modulePermissions]) => (
                       <Paper key={module} variant="outlined" sx={{ p: 1.5 }}>
                         <Typography fontWeight={700} sx={{ textTransform: 'capitalize' }}>
-                          {module.replaceAll('_', ' ')}
+                          {module === 'pos' ? 'POS' : module.replaceAll('_', ' ')}
                         </Typography>
                         <FormGroup row>
                           {modulePermissions.map((permission) => (
@@ -665,7 +669,7 @@ export default function AccessManagementPage() {
                     {Object.entries(permissionGroups).map(([module, modulePermissions]) => (
                       <Paper key={module} variant="outlined" sx={{ p: 1.5 }}>
                         <Typography fontWeight={700} sx={{ textTransform: 'capitalize' }}>
-                          {module.replaceAll('_', ' ')}
+                          {module === 'pos' ? 'POS' : module.replaceAll('_', ' ')}
                         </Typography>
                         <FormGroup row>
                           {modulePermissions.map((permission) => (
