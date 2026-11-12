@@ -1,5 +1,6 @@
 import { Link as RouterLink } from 'react-router-dom'
 import { formatOrderStatus } from '../orders/orderStatus.js'
+import { canPrintOrderReceipt, RECEIPT_UNAVAILABLE_MESSAGE } from '../orders/receiptEligibility.js'
 import { useCallback, useEffect, useState } from 'react'
 import {
   Alert,
@@ -428,7 +429,9 @@ export default function AdminOrdersPage() {
               Order details{selectedOrder ? ` · ${selectedOrder.order_number}` : ''}
             </DialogTitle>
             <DialogContent dividers sx={{ maxHeight: '75vh' }}>
-              {selectedOrder && <Button component={RouterLink} to={`/receipt/${selectedOrder.id}`} target="_blank" rel="noopener noreferrer" variant="outlined" sx={{ mb: 2 }}>Print receipt</Button>}
+              {selectedOrder && (canPrintOrderReceipt(selectedOrder)
+                ? <Button component={RouterLink} to={`/receipt/${selectedOrder.id}`} target="_blank" rel="noopener noreferrer" variant="outlined" sx={{ mb: 2 }}>Print receipt</Button>
+                : <Alert severity="info" sx={{ mb: 2 }}>{RECEIPT_UNAVAILABLE_MESSAGE}</Alert>)}
         {orders.map((order) => {
           if (order.id !== selectedOrderId) return null
           const payment = Array.isArray(order.payment) ? order.payment[0] : order.payment

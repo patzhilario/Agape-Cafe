@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal, flushSync } from 'react-dom'
-import { Box, Button, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
+import { Alert, Box, Button, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
 import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined'
 import { formatPrice } from '../public/publicData.js'
 import { formatOrderDate } from './formatOrderDate.js'
 import { formatOrderStatus } from './orderStatus.js'
+import { canPrintOrderReceipt, RECEIPT_UNAVAILABLE_MESSAGE } from './receiptEligibility.js'
 import '../../pages/orderReceipt.css'
 
 const logo = new URL('../../assets/logo.jpg', import.meta.url).href
@@ -67,6 +68,11 @@ function Receipt({ order, paper, paperRef }) {
 }
 
 export default function PrintableReceipt({ order, initialPaper = 'thermal', autoPrint = false }) {
+  if (!canPrintOrderReceipt(order)) return <Alert severity="info">{RECEIPT_UNAVAILABLE_MESSAGE}</Alert>
+  return <AcceptedReceipt order={order} initialPaper={initialPaper} autoPrint={autoPrint} />
+}
+
+function AcceptedReceipt({ order, initialPaper, autoPrint }) {
   const [paper, setPaper] = useState(initialPaper)
   const [printHeight, setPrintHeight] = useState(297)
   const [printing, setPrinting] = useState(false)

@@ -1,5 +1,6 @@
 import { validatePaymentReceipt } from '../features/orders/paymentReceipt.js'
 import { formatOrderStatus } from '../features/orders/orderStatus.js'
+import { canPrintOrderReceipt, RECEIPT_UNAVAILABLE_MESSAGE } from '../features/orders/receiptEligibility.js'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -183,7 +184,9 @@ export default function OrderDetailPage() {
         >
           Refresh order and discount status
         </Button>
-        {order && <Button component={RouterLink} to={`/receipt/${order.id}`} target="_blank" rel="noopener noreferrer" variant="outlined" sx={{ alignSelf: 'flex-start' }}>Print receipt</Button>}
+        {order && (canPrintOrderReceipt(order)
+          ? <Button component={RouterLink} to={`/receipt/${order.id}`} target="_blank" rel="noopener noreferrer" variant="outlined" sx={{ alignSelf: 'flex-start' }}>Print receipt</Button>
+          : <Alert severity="info">{RECEIPT_UNAVAILABLE_MESSAGE}</Alert>)}
         {searchParams.get('placed') === '1' && (
           <Alert severity="success">
             Order received.
